@@ -1,0 +1,69 @@
+
+{
+  "name": "lms-system",
+  "version": "3.9.0",
+  "description": "Nền tảng LMS - DHsystem",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "start": "electron .",
+    "clean": "rimraf dist dist-electron",
+    "build": "npm run clean && vite build && electron-builder --win --x64"
+  },
+  "author": "DHsystem",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "@google/generative-ai": "^0.24.1",
+    "katex": "^0.16.9",
+    "pdfjs-dist": "^4.0.379",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.6",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "vite": "^7.3.0"
+  },
+  "build": {
+    "appId": "com.dhsystem.lms",
+    "productName": "LMS-DHsystem",
+    "copyright": "Copyright © 2026 DHsystem",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "publisherName": "DHsystem"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LMS System",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "Gỡ cài đặt LMS-System"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "package.json",
+      "version.json"
+    ],
+    "extraResources": [
+      "build/icon.ico"
+    ]
+  }
+}
