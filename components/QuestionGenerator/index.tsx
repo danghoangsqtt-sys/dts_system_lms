@@ -5,16 +5,19 @@ import AIGeneratorTab from './AIGeneratorTab';
 import ManualCreatorTab from './ManualCreatorTab';
 import ReviewList from './ReviewList';
 import { Link } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface QuestionGeneratorProps {
   folders: QuestionFolder[];
-  onSaveQuestions: (questions: Question[]) => void;
+  onSaveQuestions: (questions: Question[]) => void; // Maintained for local cache if needed
   onNotify: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 type TabMode = 'AI' | 'MANUAL';
 
 const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQuestions, onNotify }) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabMode>('AI');
   const [pendingQuestions, setPendingQuestions] = useState<Question[]>([]);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -49,11 +52,36 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     if (newList.length === 0) setIsPreviewMode(false);
   };
 
-  const handleSaveFinal = () => {
-    onSaveQuestions(pendingQuestions);
-    setPendingQuestions([]);
-    setIsPreviewMode(false);
-    onNotify(`Đã lưu ${pendingQuestions.length} câu hỏi mới vào hệ thống.`, "success");
+  const handleSaveFinal = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+        const payload = pendingQuestions.map(q => ({
+            content: q.content,
+            type: q.type,
+            options: q.options,
+            correct_answer: q.correctAnswer,
+            explanation: q.explanation,
+            bloom_level: q.bloomLevel,
+            category: q.category,
+            folder_id: q.folderId === 'default' ? null : q.folderId,
+            creator_id: user.id,
+            image: q.image,
+            is_public_bank: false
+        }));
+
+        const { error } = await supabase.from('questions').insert(payload);
+        if (error) throw error;
+
+        onSaveQuestions(pendingQuestions); // Sync local state
+        setPendingQuestions([]);
+        setIsPreviewMode(false);
+        onNotify(`Đã lưu ${pendingQuestions.length} câu hỏi mới vào Ngân hàng dữ liệu Cloud.`, "success");
+    } catch (err: any) {
+        onNotify(`Lỗi lưu trữ: ${err.message}`, "error");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   if (!hasApiKey && activeTab === 'AI') {
@@ -95,7 +123,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-3">Biên soạn học liệu AI</h2>
           <p className="text-slate-500 text-sm font-medium italic flex items-center gap-2">
-            <i className="fas fa-microchip text-blue-500"></i> Sử dụng Trí tuệ nhân tạo để tự động hóa quy trình
+            <i className="fas fa-wand-magic-sparkles text-blue-500"></i> Trích xuất tri thức từ tài liệu chuyên môn
           </p>
         </div>
         

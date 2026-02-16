@@ -9,29 +9,31 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface GameQuizProps {
-  questions: Question[]; // Giữ lại cho tương thích local bank (admin/teacher)
   folders: QuestionFolder[];
 }
 
 type GameMode = 'LOBBY' | 'TIMED' | 'ORAL' | 'FLASHCARD' | 'MILLIONAIRE';
 
-const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders }) => {
+const GameQuiz: React.FC<GameQuizProps> = ({ folders }) => {
   const { user } = useAuth();
   const [mode, setMode] = useState<GameMode>('LOBBY');
   const [gameState, setGameState] = useState<'SELECT_EXAM' | 'CONFIG' | 'READY'>('SELECT_EXAM');
   
-  // States cho Học viên
+  // Data States
   const [assignedExams, setAssignedExams] = useState<Exam[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-  const [examQuestions, setExamQuestions] = useState<Question[]>([]);
+  const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch Đề thi dành riêng cho lớp của học viên
+  // Fetch Exams or General Questions on Load
   useEffect(() => {
-    if (user?.role === 'student' && user?.classId) {
-        const fetchExams = async () => {
-            setLoading(true);
-            try {
+    if (!user) return;
+
+    const initializeGameLobby = async () => {
+        setLoading(true);
+        try {
+            if (user.role === 'student' && user.classId) {
+                // HỌC VIÊN: Lấy đề thi được gán cho lớp
                 const { data, error } = await supabase
                     .from('exams')
                     .select('*')
@@ -39,29 +41,41 @@ const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders 
                 
                 if (error) throw error;
                 setAssignedExams(data || []);
-            } catch (e) {
-                console.error("Lỗi fetch đề thi:", e);
-            } finally {
-                setLoading(false);
+                setGameState('SELECT_EXAM');
+            } else {
+                // GIẢNG VIÊN/ADMIN: Lấy ngẫu nhiên câu hỏi để ôn tập nhanh
+                const { data, error } = await supabase
+                    .from('questions')
+                    .select('*')
+                    .limit(20); // Lấy 20 câu mẫu cho lobby
+                
+                if (error) throw error;
+                setActiveQuestions(data || []);
+                setGameState('CONFIG');
             }
-        };
-        fetchExams();
-    }
+        } catch (e) {
+            console.error("Lobby initialization error:", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    initializeGameLobby();
   }, [user]);
 
+  // Handle Exam Selection for Students
   const handleSelectExam = async (exam: Exam) => {
     setSelectedExam(exam);
     setLoading(true);
     try {
-        // Bảo mật: Chỉ fetch những câu hỏi nằm trong đề thi này
-        // Không query theo folder để tránh lộ ngân hàng đề
+        // Fetch specific questions listed in the exam
         const { data, error } = await supabase
             .from('questions')
             .select('*')
             .in('id', exam.questionIds);
         
         if (error) throw error;
-        setExamQuestions(data || []);
+        setActiveQuestions(data || []);
         setGameState('CONFIG');
     } catch (e) {
         alert("Không thể tải nội dung đề thi.");
@@ -70,24 +84,57 @@ const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders 
     }
   };
 
-  // Nếu là giáo viên, dùng ngân hàng local hoặc logic khác (đang giữ nguyên local questions cho giáo viên)
-  const currentAvailableQuestions = user?.role === 'student' ? examQuestions : localQuestions;
+  // UI Helper: Game Card
+  const GameCard = ({ onClick, icon, color, title, description, availableCount, requiredType }: any) => {
+    const filteredCount = requiredType 
+        ? activeQuestions.filter(q => q.type === requiredType).length 
+        : activeQuestions.length;
+    
+    const isAvailable = filteredCount > 0;
 
-  // Điều hướng Game Engine
+    return (
+        <button 
+          onClick={onClick}
+          disabled={!isAvailable}
+          className={`group p-10 bg-white rounded-[3.5rem] border border-slate-100 shadow-sm text-left transition-all hover:shadow-2xl hover:scale-[1.02] active:scale-95 flex flex-col items-start h-full disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed relative overflow-hidden`}
+        >
+          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-8 text-2xl transition-all group-hover:rotate-12 bg-${color}-50 text-${color}-600 border border-${color}-100`}>
+            <i className={`fas ${icon}`}></i>
+          </div>
+          <h3 className="text-2xl font-black text-slate-900 mb-4 tracking-tight leading-none">{title}</h3>
+          <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8 flex-1">{description}</p>
+          
+          <div className="flex justify-between items-center w-full mt-auto">
+              <div className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${isAvailable ? `text-${color}-600` : 'text-slate-400'}`}>
+                {isAvailable ? (
+                    <>CHƠI NGAY <i className="fas fa-arrow-right"></i></>
+                ) : (
+                    <>KHÔNG KHẢ DỤNG <i className="fas fa-lock text-[8px]"></i></>
+                )}
+              </div>
+              <span className="text-[9px] font-bold text-slate-300 bg-slate-50 px-2 py-1 rounded-lg">
+                  {filteredCount} Câu hỏi
+              </span>
+          </div>
+        </button>
+    );
+  };
+
+  // Game Engine Router
   if (mode === 'TIMED') {
-    return <TimedChallengeGame questions={currentAvailableQuestions} onExit={() => setMode('LOBBY')} />;
+    return <TimedChallengeGame questions={activeQuestions} onExit={() => setMode('LOBBY')} />;
   }
 
   if (mode === 'ORAL') {
-    return <OralGame questions={currentAvailableQuestions.filter(q => q.type === QuestionType.ESSAY)} onExit={() => setMode('LOBBY')} />;
+    return <OralGame questions={activeQuestions.filter(q => q.type === QuestionType.ESSAY)} onExit={() => setMode('LOBBY')} />;
   }
 
   if (mode === 'FLASHCARD') {
-    return <FlashcardGame questions={currentAvailableQuestions} onExit={() => setMode('LOBBY')} />;
+    return <FlashcardGame questions={activeQuestions} onExit={() => setMode('LOBBY')} />;
   }
 
   if (mode === 'MILLIONAIRE') {
-    return <MillionaireGame questions={currentAvailableQuestions.filter(q => q.type === QuestionType.MULTIPLE_CHOICE)} onExit={() => setMode('LOBBY')} />;
+    return <MillionaireGame questions={activeQuestions.filter(q => q.type === QuestionType.MULTIPLE_CHOICE)} onExit={() => setMode('LOBBY')} />;
   }
 
   return (
@@ -105,13 +152,14 @@ const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders 
               <i className="fas fa-user-graduate"></i>
            </div>
            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Học viên</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{user?.role === 'student' ? 'Học viên' : 'Giảng viên'}</p>
               <h4 className="font-black text-slate-800 text-sm">{user?.fullName}</h4>
            </div>
         </div>
       </header>
 
       <div className="max-w-6xl mx-auto space-y-10">
+        {/* Step 1: Select Exam (Students Only) */}
         {user?.role === 'student' && gameState === 'SELECT_EXAM' && (
             <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm animate-fade-in-up">
                 <h3 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-4">
@@ -149,6 +197,7 @@ const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders 
             </div>
         )}
 
+        {/* Step 2: Select Game Mode (Config Mode) */}
         {(user?.role !== 'student' || gameState === 'CONFIG') && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up">
                 {selectedExam && (
@@ -158,13 +207,27 @@ const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders 
                                 <i className="fas fa-award"></i>
                             </div>
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80">Đang chọn đề thi</p>
+                                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80">Nội dung ôn luyện theo đề:</p>
                                 <h3 className="text-2xl font-black">{selectedExam.title}</h3>
                             </div>
                         </div>
-                        <button onClick={() => setGameState('SELECT_EXAM')} className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">
-                            Đổi đề thi khác
-                        </button>
+                        {user?.role === 'student' && (
+                            <button onClick={() => setGameState('SELECT_EXAM')} className="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">
+                                Đổi đề thi khác
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {user?.role !== 'student' && !selectedExam && (
+                    <div className="lg:col-span-2 bg-slate-900 p-8 rounded-[3rem] text-white flex items-center gap-6 shadow-2xl">
+                         <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-xl">
+                            <i className="fas fa-bolt"></i>
+                         </div>
+                         <div>
+                            <h3 className="text-xl font-black">Chế độ Ôn luyện Nhanh (Giảng viên)</h3>
+                            <p className="text-xs text-slate-400 font-medium mt-1">Hệ thống tự động lấy ngẫu nhiên 20 câu hỏi từ ngân hàng để bạn trải nghiệm game.</p>
+                         </div>
                     </div>
                 )}
 
@@ -173,59 +236,38 @@ const GameQuiz: React.FC<GameQuizProps> = ({ questions: localQuestions, folders 
                     icon="fa-bolt-lightning"
                     color="orange"
                     title="Thử thách 60s"
-                    description="Kiểm tra phản xạ nhanh với các câu hỏi kiến thức an toàn điện."
-                    available={currentAvailableQuestions.length >= 1}
+                    description="Kiểm tra phản xạ nhanh với các câu hỏi kiến thức an toàn điện dưới áp lực thời gian."
                 />
                 <GameCard 
                     onClick={() => setMode('MILLIONAIRE')}
                     icon="fa-money-bill-trend-up"
                     color="green"
                     title="Ai là triệu phú"
-                    description="Vượt qua 15 câu hỏi để nhận phần thưởng điểm số tối đa."
-                    available={currentAvailableQuestions.filter(q => q.type === QuestionType.MULTIPLE_CHOICE).length >= 5}
+                    description="Vượt qua các mốc câu hỏi trắc nghiệm để nhận phần thưởng điểm số tối đa."
+                    requiredType={QuestionType.MULTIPLE_CHOICE}
                 />
                  <GameCard 
                     onClick={() => setMode('ORAL')}
                     icon="fa-microphone"
                     color="blue"
                     title="Vấn đáp AI"
-                    description="AI trực tiếp chấm điểm phần trình bày kiến thức bằng giọng nói."
-                    available={currentAvailableQuestions.filter(q => q.type === QuestionType.ESSAY).length >= 1}
+                    description="AI trực tiếp chấm điểm phần trình bày kiến thức bằng giọng nói của bạn."
+                    requiredType={QuestionType.ESSAY}
                 />
                 <GameCard 
                     onClick={() => setMode('FLASHCARD')}
                     icon="fa-clone"
                     color="purple"
                     title="Thẻ ghi nhớ"
-                    description="Ôn tập kiến thức thông qua phương pháp lật thẻ ghi nhớ."
-                    available={currentAvailableQuestions.length >= 1}
+                    description="Ôn tập kiến thức thông qua phương pháp lật thẻ ghi nhớ (Active Recall)."
                 />
             </div>
         )}
+        
+        {loading && <div className="text-center py-20"><i className="fas fa-circle-notch fa-spin text-3xl text-blue-600"></i></div>}
       </div>
     </div>
   );
 };
-
-const GameCard = ({ onClick, icon, color, title, description, available }: any) => (
-  <button 
-    onClick={onClick}
-    disabled={!available}
-    className={`group p-10 bg-white rounded-[3.5rem] border border-slate-100 shadow-sm text-left transition-all hover:shadow-2xl hover:scale-[1.02] active:scale-95 flex flex-col items-start h-full disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed`}
-  >
-    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-8 text-2xl transition-all group-hover:rotate-12 bg-${color}-50 text-${color}-600 border border-${color}-100`}>
-      <i className={`fas ${icon}`}></i>
-    </div>
-    <h3 className="text-2xl font-black text-slate-900 mb-4 tracking-tight leading-none">{title}</h3>
-    <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8 flex-1">{description}</p>
-    <div className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${available ? `text-${color}-600` : 'text-slate-400'}`}>
-       {available ? (
-         <>CHƠI NGAY <i className="fas fa-arrow-right"></i></>
-       ) : (
-         <>KHÔNG KHẢ DỤNG <i className="fas fa-lock text-[8px]"></i></>
-       )}
-    </div>
-  </button>
-);
 
 export default GameQuiz;

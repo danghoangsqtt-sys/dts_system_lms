@@ -42,7 +42,7 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
   return <>{children}</>;
 };
 
-const Dashboard = ({ questions, exams }: any) => {
+const Dashboard = ({ questionsCount, examsCount }: any) => {
     const { user } = useAuth();
     return (
         <div className="p-8 space-y-12 animate-fade-in max-w-7xl mx-auto pb-20">
@@ -73,8 +73,8 @@ const Dashboard = ({ questions, exams }: any) => {
             </header>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                <StatCard icon="fa-database" color="blue" label="Kho câu hỏi" value={questions.length} unit="Câu hỏi" />
-                <StatCard icon="fa-file-invoice" color="indigo" label="Đề thi hiện có" value={exams?.length || 0} unit="Đề thi" />
+                <StatCard icon="fa-database" color="blue" label="Hệ thống câu hỏi" value={questionsCount} unit="Câu hỏi" />
+                <StatCard icon="fa-file-invoice" color="indigo" label="Đề thi hiện có" value={examsCount} unit="Đề thi" />
                 <StatCard icon="fa-layer-group" color="orange" label="Chuyên đề học tập" value={JSON.parse(localStorage.getItem('question_folders') || '[]').length} unit="Chủ đề" />
                 <StatCard icon="fa-file-pdf" color="purple" label="Kho giáo trình" value={JSON.parse(localStorage.getItem('elearning_docs') || '[]').length} unit="Tài liệu" />
             </div>
@@ -206,14 +206,14 @@ const AppContent: React.FC = () => {
               <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50 relative">
                 <div className="flex-1 overflow-auto custom-scrollbar">
                   <Routes>
-                    <Route path="/" element={<Dashboard questions={questions} exams={exams} />} />
+                    <Route path="/" element={<Dashboard questionsCount={questions.length} examsCount={exams.length} />} />
                     <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard onNotify={showNotify}/></ProtectedRoute>} />
                     <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherStudents onNotify={showNotify}/></ProtectedRoute>} />
                     <Route path="/lectures" element={<LectureManager onNotify={showNotify}/>} />
                     <Route path="/documents" element={<Documents onUpdateKnowledgeBase={(chunks) => setKnowledgeBase(p => [...p, ...chunks])} onDeleteDocumentData={(id) => setKnowledgeBase(p => p.filter(c => c.docId !== id))} onNotify={showNotify} />} />
                     <Route path="/generate" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><QuestionGenerator folders={folders} onSaveQuestions={(q)=>setQuestions(p=>[...p,...q])} onNotify={showNotify}/></ProtectedRoute>} />
-                    <Route path="/bank" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><QuestionBankManager questions={questions} setQuestions={setQuestions} folders={folders} setFolders={setFolders} exams={exams} setExams={setExams} showNotify={showNotify} /></ProtectedRoute>} />
-                    <Route path="/game" element={<GameQuiz questions={questions} folders={folders} />} />
+                    <Route path="/bank" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><QuestionBankManager folders={folders} setFolders={setFolders} exams={exams} setExams={setExams} showNotify={showNotify} /></ProtectedRoute>} />
+                    <Route path="/game" element={<GameQuiz folders={folders} />} />
                     <Route path="/settings" element={<Settings onNotify={showNotify} />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>

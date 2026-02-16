@@ -28,6 +28,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeModel, setActiveModel] = useState<string>(''); // Track the active model
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,6 +64,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setActiveModel('');
 
     try {
         const history = messages.map(m => ({
@@ -77,6 +79,9 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
             knowledgeBase 
         );
         
+        // Cập nhật model thực tế đã sử dụng
+        if (response.modelUsed) setActiveModel(response.modelUsed);
+
         const modelMsg: ChatMessage = {
             id: (Date.now() + 1).toString(),
             role: 'model',
@@ -121,7 +126,13 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                       <h4 className="text-white font-black text-[14px] leading-none tracking-tight">DHsystem AI</h4>
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
                     </div>
-                    <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mt-1.5 block">Personal Tutor</span>
+                    {activeModel && activeModel.includes('1.5') ? (
+                       <span className="text-[9px] font-bold text-orange-400 uppercase tracking-widest mt-1.5 flex items-center gap-1">
+                         <i className="fas fa-shield-cat"></i> Fallback Mode
+                       </span>
+                    ) : (
+                       <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mt-1.5 block">Personal Tutor</span>
+                    )}
                 </div>
             </div>
             <div className="flex gap-2 relative z-10">
@@ -207,6 +218,14 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                     </div>
 
                     <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+                        {activeModel && activeModel.includes('1.5') && (
+                            <div className="mb-3 flex justify-center animate-fade-in-up">
+                                <div className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-[9px] font-black border border-orange-100 flex items-center gap-1.5">
+                                    <i className="fas fa-triangle-exclamation"></i>
+                                    Đang sử dụng Gemini 1.5 Flash do quá tải
+                                </div>
+                            </div>
+                        )}
                         <div className="flex items-center gap-3 p-1.5 bg-slate-50 border border-slate-200 rounded-[2.2rem] focus-within:ring-4 focus-within:ring-blue-500/5 transition-all">
                             <input
                               type="text"
