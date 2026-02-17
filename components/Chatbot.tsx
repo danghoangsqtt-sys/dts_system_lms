@@ -5,6 +5,7 @@ import { ChatMessage, VectorChunk } from '../types';
 import LiveChat from './LiveChat';
 import { formatContent } from '../utils/textFormatter';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ChatbotProps {
   temperature?: number;
@@ -15,21 +16,35 @@ interface ChatbotProps {
 }
 
 const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Kore', knowledgeBase, onNotify }) => {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<'TEXT' | 'LIVE'>('TEXT');
   const [input, setInput] = useState('');
   const [hasKey, setHasKey] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'model',
-      text: 'Xin chào! Tôi là Trợ lý AI được huấn luyện bởi **DHsystem**. Tôi đã sẵn sàng hỗ trợ bạn học tập môn **Nguồn điện an toàn và môi trường**. Bạn cần tôi giải đáp nội dung gì?',
-      timestamp: Date.now(),
-    },
-  ]);
+  
+  // Custom initial message based on role
+  const getInitialMessage = () => {
+      if (user?.role === 'teacher') return `Xin chào Giảng viên ${user.fullName}. Tôi là Trợ giảng ảo của thầy/cô. Hôm nay thầy/cô cần hỗ trợ soạn bài hay tra cứu tài liệu?`;
+      if (user?.role === 'admin') return `Hệ thống sẵn sàng. Admin ${user.fullName} cần tra cứu thông số gì?`;
+      return `Chào em ${user?.fullName || 'bạn'}. Thầy là Trợ lý AI môn Nguồn điện an toàn. Em đang ôn tập phần nào thế?`;
+  };
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeModel, setActiveModel] = useState<string>(''); // Track the active model
+  const [activeModel, setActiveModel] = useState<string>(''); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize welcome message when user loads
+  useEffect(() => {
+      if (user && messages.length === 0) {
+          setMessages([{
+              id: 'welcome',
+              role: 'model',
+              text: getInitialMessage(),
+              timestamp: Date.now(),
+          }]);
+      }
+  }, [user]);
 
   useEffect(() => {
     const key = localStorage.getItem('USER_GEMINI_KEY');
@@ -72,20 +87,21 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
             parts: [{ text: m.text }]
         }));
 
+        // Pass 'user' object to service for role-based persona
         const response = await generateChatResponse(
             history, 
             userMsg.text, 
             { temperature, maxOutputTokens: maxTokens },
-            knowledgeBase 
+            knowledgeBase,
+            user 
         );
         
-        // Cập nhật model thực tế đã sử dụng
         if (response.modelUsed) setActiveModel(response.modelUsed);
 
         const modelMsg: ChatMessage = {
             id: (Date.now() + 1).toString(),
             role: 'model',
-            text: response.text || "Xin lỗi, DHsystem AI hiện chưa tìm thấy thông tin phù hợp.",
+            text: response.text || "Xin lỗi, tôi chưa hiểu ý bạn.",
             timestamp: Date.now(),
             sources: response.sources,
             isRAG: response.sources.some(s => s.title.includes('Giáo trình'))
@@ -93,10 +109,10 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
         
         setMessages((prev) => [...prev, modelMsg]);
     } catch (error: any) {
-        let errorText = 'DHsystem AI phát hiện lỗi kết nối. Hãy kiểm tra API Key trong phần Cài đặt.';
+        let errorText = 'Hệ thống gặp lỗi kết nối AI. Vui lòng thử lại sau.';
         
         if (error.toString().includes('429') || error.toString().includes('RESOURCE_EXHAUSTED')) {
-          errorText = '⚠️ **Hết lượt sử dụng (Quota Exceeded)**: Bạn đã vượt quá giới hạn lượt hỏi miễn phí trong phút/ngày của Google Gemini API. Vui lòng thử lại sau ít phút hoặc sử dụng API Key khác.';
+          errorText = '⚠️ **Hệ thống đang quá tải**: Vui lòng đợi 30 giây rồi thử lại. (Gợi ý: Dùng API Key cá nhân trong Cài đặt để ổn định hơn).';
         }
 
         setMessages((prev) => [...prev, {
@@ -118,12 +134,18 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
           <div className="bg-[#0f172a] p-5 flex justify-between items-center shrink-0 border-b border-white/5 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
             <div className="flex items-center gap-4 relative z-10">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center text-white shadow-lg relative">
                     <i className="fas fa-robot text-xl"></i>
+                    {/* Role Badge */}
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center border-2 border-blue-700">
+                        {user?.role === 'teacher' ? <i className="fas fa-chalkboard-user text-[8px] text-blue-600"></i> : <i className="fas fa-graduation-cap text-[8px] text-blue-600"></i>}
+                    </div>
                 </div>
                 <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-white font-black text-[14px] leading-none tracking-tight">DHsystem AI</h4>
+                      <h4 className="text-white font-black text-[14px] leading-none tracking-tight">
+                          {user?.role === 'teacher' ? 'Trợ Giảng AI' : 'Thầy Giáo AI'}
+                      </h4>
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
                     </div>
                     {activeModel && activeModel.includes('1.5') ? (
@@ -131,7 +153,9 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                          <i className="fas fa-shield-cat"></i> Fallback Mode
                        </span>
                     ) : (
-                       <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mt-1.5 block">Personal Tutor</span>
+                       <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mt-1.5 block">
+                           {user?.role === 'teacher' ? 'Professional Assistant' : 'Personal Tutor'}
+                       </span>
                     )}
                 </div>
             </div>
@@ -181,7 +205,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                                 }`}>
                                     {msg.role === 'model' && msg.isRAG && (
                                         <div className="flex items-center gap-1.5 mb-2.5 text-[9px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100 w-fit uppercase tracking-tighter">
-                                            <i className="fas fa-brain-circuit"></i> NGUỒN TRI THỨC GIÁO TRÌNH
+                                            <i className="fas fa-brain-circuit"></i> GIÁO TRÌNH
                                         </div>
                                     )}
                                     <div className="leading-relaxed font-medium">
@@ -222,7 +246,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                             <div className="mb-3 flex justify-center animate-fade-in-up">
                                 <div className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-[9px] font-black border border-orange-100 flex items-center gap-1.5">
                                     <i className="fas fa-triangle-exclamation"></i>
-                                    Đang sử dụng Gemini 1.5 Flash do quá tải
+                                    Chế độ tiết kiệm (1.5 Flash)
                                 </div>
                             </div>
                         )}
@@ -232,8 +256,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                               value={input}
                               onChange={(e) => setInput(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                              placeholder="Nhập câu hỏi chuyên môn..."
-                              className="flex-1 bg-transparent px-4 py-2 text-[14px] outline-none font-medium text-slate-700"
+                              placeholder={user?.role === 'teacher' ? "Nhập yêu cầu soạn bài, tra cứu..." : "Hỏi thầy về bài học..."}
+                              className="flex-1 bg-transparent px-4 py-2 text-[14px] outline-none font-medium text-slate-700 placeholder:text-slate-400"
                             />
                             <button
                               onClick={handleSendMessage}

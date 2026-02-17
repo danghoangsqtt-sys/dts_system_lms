@@ -9,7 +9,7 @@ interface SettingsProps {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  modelName: 'gemini-3-flash-preview',
+  modelName: 'gemini-2.5-flash',
   aiVoice: 'Zephyr',
   temperature: 0.7,
   maxOutputTokens: 2048,
@@ -23,7 +23,14 @@ const DEFAULT_SETTINGS: AppSettings = {
 const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('app_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    
+    // FORCE MIGRATION: Nếu phát hiện đang dùng bản 3.0 preview (gây lỗi 429), chuyển ngay về 2.5
+    if (parsed.modelName === 'gemini-3-flash-preview') {
+        parsed.modelName = 'gemini-2.5-flash';
+        localStorage.setItem('app_settings', JSON.stringify(parsed));
+    }
+    return parsed;
   });
 
   const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('USER_GEMINI_KEY') || '');
@@ -34,6 +41,14 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
   useEffect(() => {
     const kb = JSON.parse(localStorage.getItem('knowledge_base') || '[]');
     setKbSize(kb.length);
+    
+    // Double check migration on mount
+    if (settings.modelName === 'gemini-3-flash-preview') {
+        const newSettings = { ...settings, modelName: 'gemini-2.5-flash' };
+        setSettings(newSettings);
+        localStorage.setItem('app_settings', JSON.stringify(newSettings));
+        onNotify("Đã tự động chuyển về Gemini 2.5 Flash để đảm bảo ổn định.", "info");
+    }
   }, []);
 
   const saveSettings = () => {
@@ -181,9 +196,10 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
                             onChange={e => setSettings({...settings, modelName: e.target.value})} 
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                            <option value="gemini-3-flash-preview">Gemini 3 Flash (Nhanh)</option>
-                            <option value="gemini-3-pro-preview">Gemini 3 Pro (Mạnh mẽ)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Khuyên dùng - Ổn định)</option>
+                            {/* Removed 3.0 Option to prevent errors */}
                         </select>
+                        <p className="text-[9px] text-slate-400 italic">Phiên bản Gemini 3 Preview đã bị ẩn do vấn đề quá tải hệ thống (429).</p>
                     </div>
 
                     <div className="space-y-4">

@@ -1,11 +1,11 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { Question, QuestionType, VectorChunk, AppSettings } from "../types";
+import { Question, QuestionType, VectorChunk, AppSettings, UserProfile } from "../types";
 import { findRelevantChunks } from "./documentProcessor";
 
-// --- CONSTANTS ---
-const PRIMARY_MODEL = "gemini-3-flash-preview"; // Thông minh nhất, hỗ trợ Search
-const FALLBACK_MODEL = "gemini-1.5-flash";      // "Quốc dân": Ổn định, 15 RPM, Free
+// --- CONFIGURATION ---
+const PRIMARY_MODEL = "gemini-2.5-flash"; 
+const FALLBACK_MODEL = "gemini-flash-latest"; 
 
 const DEFAULT_SETTINGS: AppSettings = {
   modelName: PRIMARY_MODEL, 
@@ -36,71 +36,134 @@ const getAI = () => {
 };
 
 /**
- * WRAPPER THÔNG MINH:
- * 1. Gọi model chính.
- * 2. Nếu lỗi Quota (429) hoặc Server (503) -> Chuyển sang Fallback Model.
- * 3. Khi Fallback: TỰ ĐỘNG TẮT TOOL (Search/Thinking) để đảm bảo thành công.
+ * SMART WRAPPER: Handles 429/503 errors by falling back to a stable model.
  */
-const generateContentWithFallback = async (
+const generateWithFallback = async (
   ai: GoogleGenAI, 
-  params: any,
-  defaultModel: string
+  params: any, 
+  retryCount = 4
 ): Promise<{ response: GenerateContentResponse, usedModel: string }> => {
-  try {
-    // [STEP 1] Thử gọi với Model chính
-    console.log(`[AI-CORE] Primary Attempt: ${defaultModel}`);
-    const response = await ai.models.generateContent({
-      ...params,
-      model: defaultModel
-    });
-    return { response, usedModel: defaultModel };
+  let currentModel = params.model;
 
-  } catch (error: any) {
-    const errorMsg = error.toString();
-    const isQuotaError = errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED');
-    const isServerError = errorMsg.includes('503') || errorMsg.includes('500') || errorMsg.includes('Overloaded');
+  // SAFETY NET: Force downgrade if 3.0 is requested due to quota issues
+  if (currentModel === 'gemini-3-flash-preview') {
+      console.warn("[AI-SAFETY] Intercepted 3.0 request. Downgrading to 2.5 Flash for stability.");
+      currentModel = PRIMARY_MODEL;
+  }
+  
+  if (!currentModel) currentModel = PRIMARY_MODEL;
 
-    // [STEP 2] Nếu lỗi do quá tải -> Kích hoạt Fallback
-    if ((isQuotaError || isServerError) && defaultModel !== FALLBACK_MODEL) {
-      console.warn(`[AI-WARNING] ${defaultModel} overloaded (${isQuotaError ? '429' : '503'}). Switching to Fallback: ${FALLBACK_MODEL}`);
+  let attempt = 0;
+  // Clone config to safely modify for fallback
+  let currentConfig = params.config ? { ...params.config } : {};
+
+  while (attempt < retryCount) {
+    try {
+      // Execute request
+      const response = await ai.models.generateContent({
+        ...params,
+        model: currentModel,
+        config: currentConfig
+      });
       
-      try {
-        // [STEP 3] Chuẩn bị Config cho Fallback (Tối ưu hóa khả năng thành công)
-        const fallbackParams = { ...params };
-        
-        // TẮT TOOLS: Google Search tốn quota và latency, tắt đi ở chế độ dự phòng
-        if (fallbackParams.config) {
-            fallbackParams.config.tools = undefined; 
-            // TẮT THINKING: 1.5 Flash không hỗ trợ thinking
-            if (fallbackParams.config.thinkingConfig) {
-                delete fallbackParams.config.thinkingConfig;
-            }
+      return { response, usedModel: currentModel };
+
+    } catch (error: any) {
+      const msg = error.toString();
+      const status = error.status || 0;
+      const isQuotaError = msg.includes('429') || status === 429 || msg.includes('RESOURCE_EXHAUSTED');
+      const isServerOverload = msg.includes('503') || status === 503 || msg.includes('Overloaded');
+
+      if (isQuotaError || isServerOverload) {
+        console.warn(`[AI-WARN] Model ${currentModel} hit limit (Status: ${status}).`);
+
+        // LEVEL 1: Switch to Fallback Model (High Quota) but TRY TO KEEP TOOLS
+        if (currentModel !== FALLBACK_MODEL) {
+           console.log(`[AI-FALLBACK] Switching to ${FALLBACK_MODEL} (Stable) - Retaining tools.`);
+           currentModel = FALLBACK_MODEL;
+           
+           if (currentConfig.thinkingConfig) delete currentConfig.thinkingConfig;
+           
+           // Small delay to let buffers clear
+           await new Promise(r => setTimeout(r, 500));
+           continue; 
         }
 
-        const fallbackResponse = await ai.models.generateContent({
-          ...fallbackParams,
-          model: FALLBACK_MODEL
-        });
-        return { response: fallbackResponse, usedModel: FALLBACK_MODEL };
-      } catch (fallbackError: any) {
-        console.error(`[AI-ERROR] Fallback cũng thất bại:`, fallbackError);
-        throw fallbackError; // Ném lỗi gốc nếu cả 2 đều chết
-      }
-    }
+        // LEVEL 2: If Fallback with Tools fails, remove Tools (Text Only Mode)
+        if (currentModel === FALLBACK_MODEL && currentConfig.tools) {
+           console.log(`[AI-FALLBACK] Disabling tools for ${FALLBACK_MODEL} to ensure text response.`);
+           delete currentConfig.tools;
+           await new Promise(r => setTimeout(r, 800));
+           continue;
+        }
 
-    throw error; // Ném lỗi nếu không phải do quota (ví dụ: Key sai, Prompt bị chặn)
+        // LEVEL 3: Exponential Backoff if already on bare-bones Fallback
+        attempt++;
+        if (attempt >= retryCount) break; // Exit loop to throw error
+
+        const delay = 1000 * Math.pow(2, attempt);
+        console.log(`[AI-RETRY] Retrying ${FALLBACK_MODEL} in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      // Throw immediately for other errors (400, 401, 404)
+      if (status === 404 || msg.includes('404')) {
+         throw new Error(`Model '${currentModel}' không tồn tại (404).`);
+      }
+      throw error;
+    }
   }
+  
+  throw new Error("Hệ thống AI đang quá tải (429/503). Vui lòng thử lại sau hoặc đổi API Key.");
 };
 
-const getSystemInstruction = (settings: AppSettings, contextText: string) => {
-  let instruction = `Bạn là Chuyên gia Cao cấp kiêm Giảng viên môn "Nguồn điện An toàn và Môi trường". 
-NHIỆM VỤ: Giải đáp thắc mắc về kỹ thuật điện, tiêu chuẩn an toàn (IEC 60364, TCVN), các loại nguồn điện (PV, Wind, Battery), và tác động môi trường của ngành năng lượng.
-PHONG CÁCH: Chuyên nghiệp, chính xác, sử dụng thuật ngữ kỹ thuật chuẩn xác.
-ĐỊNH DẠNG: Sử dụng Markdown. Sử dụng LaTeX ($...$) cho công thức.`;
+const getSystemInstruction = (settings: AppSettings, contextText: string, user?: UserProfile | null) => {
+  const userName = user?.fullName || "Bạn";
+  const userRole = user?.role || "student";
+
+  let roleInstruction = "";
+
+  if (userRole === 'teacher') {
+    roleInstruction = `
+    VAI TRÒ: Đồng nghiệp ảo (AI Co-pilot) hỗ trợ giảng viên ${userName}.
+    PHONG CÁCH: Chuyên nghiệp, đi thẳng vào chuyên môn.
+    NHIỆM VỤ: Soạn giáo án, đề xuất câu hỏi thi, tra cứu quy chuẩn.
+    `;
+  } else if (userRole === 'admin') {
+    roleInstruction = `
+    VAI TRÒ: System Bot (CLI Style).
+    PHONG CÁCH: Cực ngắn gọn. Chỉ báo cáo trạng thái hoặc kết quả.
+    `;
+  } else {
+    // Default: Student
+    roleInstruction = `
+    VAI TRÒ: Thầy giáo AI (Socratic Tutor) hướng dẫn học viên ${userName}.
+    PHONG CÁCH: Thân thiện, khuyến khích tư duy.
+    `;
+  }
+
+  let instruction = `${roleInstruction}
+  
+  CẤU TRÚC TRẢ LỜI & SỬ DỤNG CÔNG CỤ (QUAN TRỌNG):
+  1. **TRA CỨU GOOGLE (Ưu tiên số 1):** 
+     - Với mọi câu hỏi về thông số kỹ thuật, quy chuẩn (TCVN, IEC), công nghệ mới hoặc kiến thức thực tế: BẮT BUỘC sử dụng công cụ Google Search.
+     - Tổng hợp thông tin từ ít nhất 2-3 nguồn tìm được.
+     - KHÔNG được bịa đặt thông tin nếu không tìm thấy.
+
+  2. **Cấu trúc phản hồi:**
+     - **Tóm tắt:** Trả lời trực tiếp câu hỏi (1-2 câu).
+     - **Chi tiết:** Giải thích sâu hơn, dùng gạch đầu dòng cho dễ đọc.
+     - **Nguồn tham khảo:** Liệt kê các link web đã dùng (nếu có dùng Search).
+     - **Gợi mở:** Đặt 1 câu hỏi ngược lại để kiểm tra mức độ hiểu bài của học viên.
+
+  3. **Định dạng:** Dùng Markdown và LaTeX ($...$) cho công thức điện học.
+  `;
 
   if (contextText) {
-    instruction += `\n\nSử dụng thêm tri thức từ giáo trình này để trả lời:\n${contextText}`;
+    instruction += `\n\n=== DỮ LIỆU TỪ GIÁO TRÌNH (Sử dụng kết hợp với Google Search) ===\n${contextText}`;
   }
+  
   return instruction;
 };
 
@@ -110,7 +173,8 @@ export const generateChatResponse = async (
   history: { role: string; parts: { text: string }[] }[],
   message: string,
   config?: { temperature?: number; maxOutputTokens?: number; model?: string },
-  knowledgeBase: VectorChunk[] = []
+  knowledgeBase: VectorChunk[] = [],
+  user?: UserProfile | null
 ) => {
   try {
     const ai = getAI();
@@ -118,38 +182,38 @@ export const generateChatResponse = async (
     let contextText = "";
     let ragSources: { uri: string; title: string }[] = [];
     
-    // Xử lý RAG
+    // RAG Logic
     if (knowledgeBase.length > 0 && message.length > 3) {
       try {
-        const topK = settings.ragTopK;
-        const relevantChunks = await findRelevantChunks(message, knowledgeBase, topK);
+        const relevantChunks = await findRelevantChunks(message, knowledgeBase, settings.ragTopK);
         if (relevantChunks.length > 0) {
           contextText = relevantChunks.map(c => c.text).join("\n\n");
-          ragSources = [{ uri: '#', title: 'Tri thức nội bộ hệ thống' }];
+          ragSources = [{ uri: '#', title: 'Giáo trình môn học (Local)' }];
         }
       } catch (e) {
-        console.warn("[RAG-ERROR] Skipping RAG.");
+        console.warn("[RAG-ERROR] Skipping RAG lookup.", e);
       }
     }
 
-    const requestedModel = config?.model || settings.modelName || PRIMARY_MODEL;
-    const systemInstruction = getSystemInstruction(settings, contextText);
+    // Determine initial model preference - Defaulting to 2.5 Flash
+    const targetModel = config?.model || settings.modelName || PRIMARY_MODEL;
+    
+    // Enable Google Search by default for "2.5" and "3" models
+    const tools = [{ googleSearch: {} }];
 
-    // Gọi API qua wrapper Fallback
-    const { response, usedModel } = await generateContentWithFallback(ai, {
+    const { response, usedModel } = await generateWithFallback(ai, {
+      model: targetModel,
       contents: [
         ...history,
         { role: 'user', parts: [{ text: message }] }
       ],
       config: {
-        systemInstruction,
+        systemInstruction: getSystemInstruction(settings, contextText, user),
         temperature: config?.temperature || settings.temperature,
-        // Chỉ bật Google Search khi dùng Model chính, nếu Fallback sẽ tự động bị tắt bởi wrapper
-        tools: [{ googleSearch: {} }] 
+        tools: tools 
       },
-    }, requestedModel);
+    });
 
-    // Xử lý nguồn search (chỉ có nếu model chính chạy thành công)
     const searchSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.filter((chunk: any) => chunk.web)
       ?.map((chunk: any) => ({
@@ -157,10 +221,15 @@ export const generateChatResponse = async (
         title: chunk.web.title
       })) || [];
 
+    // Filter out duplicate sources
+    const allSources = [...ragSources, ...searchSources].filter((v,i,a)=>a.findIndex(t=>(t.uri === v.uri))===i);
+
+    let finalText = response.text || "AI không thể tạo phản hồi.";
+    
     return {
-      text: response.text || "AI không thể tạo phản hồi.",
-      sources: [...ragSources, ...searchSources],
-      modelUsed: usedModel // Trả về model thực tế đã dùng để UI hiển thị (VD: Hiện badge 'Fallback Mode')
+      text: finalText,
+      sources: allSources,
+      modelUsed: usedModel
     };
   } catch (error: any) {
     console.error("AI Core Error:", error);
@@ -175,7 +244,6 @@ export const generateQuestionsByAI = async (
 ): Promise<Partial<Question>[]> => {
   try {
     const ai = getAI();
-    const settings = getSettings();
     
     const responseSchema = {
       type: Type.ARRAY,
@@ -194,19 +262,22 @@ export const generateQuestionsByAI = async (
       },
     };
 
-    const { response } = await generateContentWithFallback(ai, {
+    // Use Fallback mechanism for Question Generation too
+    const { response } = await generateWithFallback(ai, {
+      model: PRIMARY_MODEL, 
       contents: promptText,
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-        temperature: 0.8,
+        temperature: 0.5,
       },
-    }, settings.modelName || PRIMARY_MODEL);
+    });
     
     const text = response.text;
     if (!text) return [];
     return JSON.parse(text);
   } catch (error: any) {
+    console.error("Question Gen Error:", error);
     throw error;
   }
 };
@@ -218,10 +289,10 @@ export const evaluateOralAnswer = async (
 ): Promise<{ score: number; feedback: string }> => {
     try {
       const ai = getAI();
-      const settings = getSettings();
       
-      const { response } = await generateContentWithFallback(ai, {
-          contents: `Đánh giá câu trả lời môn học Nguồn điện an toàn và môi trường.\nCâu hỏi: ${question}\nĐáp án chuẩn: ${correctAnswerOrContext}\nCâu trả lời sinh viên: ${userAnswer}`,
+      const { response } = await generateWithFallback(ai, {
+          model: PRIMARY_MODEL,
+          contents: `Đánh giá câu trả lời môn học.\nCâu hỏi: ${question}\nĐáp án chuẩn: ${correctAnswerOrContext}\nCâu trả lời sinh viên: ${userAnswer}`,
           config: { 
               responseMimeType: "application/json", 
               temperature: 0.3,
@@ -234,12 +305,13 @@ export const evaluateOralAnswer = async (
                   required: ["score", "feedback"]
               }
           }
-      }, settings.modelName || PRIMARY_MODEL);
+      });
 
       const text = response.text;
       if (!text) return { score: 0, feedback: "AI không thể đánh giá." };
       return JSON.parse(text);
     } catch (error: any) {
+      console.error("Evaluation Error:", error);
       throw error;
     }
 };
