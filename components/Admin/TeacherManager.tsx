@@ -16,18 +16,17 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
   const fetchProfiles = async () => {
     setLoading(true);
     try {
-      // Fetch both teachers and students to manage promotions
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .in('role', ['teacher', 'student'])
-        .order('full_name', { ascending: true });
+        .in('role', ['teacher', 'student']) // Lấy cả student để Admin thăng cấp
+        .order('created_at', { ascending: false }); // Mới nhất lên đầu
       
       if (error) throw error;
 
       setUsers(data.map(d => ({
         id: d.id,
-        email: d.email || 'N/A', // Email might be restricted by RLS
+        email: d.email || 'N/A', 
         fullName: d.full_name || 'Người dùng hệ thống',
         role: d.role,
         avatarUrl: d.avatar_url,
@@ -45,7 +44,8 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
   }, []);
 
   const handleUpdateRole = async (userId: string, newRole: 'teacher' | 'student') => {
-    if (!window.confirm(`Bạn có chắc muốn thay đổi quyền của người dùng này thành ${newRole === 'teacher' ? 'Giảng viên' : 'Học viên'}?`)) return;
+    const actionName = newRole === 'teacher' ? 'Thăng cấp Giảng viên' : 'Hủy quyền Giảng viên';
+    if (!window.confirm(`Xác nhận hành động: ${actionName} cho người dùng này?`)) return;
 
     try {
       const { error } = await supabase
@@ -55,8 +55,8 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
 
       if (error) throw error;
 
-      onNotify(`Đã cập nhật vai trò thành công!`, 'success');
-      // Update local state
+      onNotify(`${actionName} thành công!`, 'success');
+      // Cập nhật state local ngay lập tức
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     } catch (err: any) {
       onNotify(err.message, 'error');
@@ -64,13 +64,36 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
   };
 
   const filteredUsers = users.filter(u => {
-    const matchSearch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        u.email?.toLowerCase().includes(searchTerm.toLowerCase());
     if (activeTab === 'TEACHERS') return u.role === 'teacher' && matchSearch;
-    return u.role === 'student' && matchSearch; // CANDIDATES
+    return u.role === 'student' && matchSearch; // CANDIDATES (Mặc định khi tạo mới ở Supabase sẽ vào đây)
   });
 
   return (
     <div className="p-8 animate-fade-in font-[Roboto]">
+      
+      {/* Workflow Guide */}
+      <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
+         <div className="flex-1">
+            <h4 className="text-sm font-black text-slate-800 uppercase mb-2 flex items-center gap-2">
+                <i className="fas fa-server text-blue-600"></i> Quy trình thêm Giáo viên mới (An toàn)
+            </h4>
+            <ol className="text-xs text-slate-600 space-y-1 list-decimal list-inside font-medium">
+               <li>Truy cập <strong>Supabase Dashboard &rarr; Authentication &rarr; Users &rarr; Add User</strong>.</li>
+               <li>Nhập Email và Mật khẩu tạm thời cho Giáo viên.</li>
+               <li>Quay lại đây và nhấn nút <strong className="text-blue-600">"Tải lại dữ liệu"</strong>.</li>
+               <li>Tìm tài khoản vừa tạo ở tab <strong>"Học viên (Mới)"</strong> và nhấn nút <strong>"Thăng cấp"</strong>.</li>
+            </ol>
+         </div>
+         <button 
+            onClick={fetchProfiles}
+            className="px-6 py-3 bg-white border border-slate-200 text-slate-700 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center gap-2 shadow-sm shrink-0"
+         >
+            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i> Tải lại dữ liệu
+         </button>
+      </div>
+
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6 border-b border-slate-100 pb-6">
         <div>
@@ -91,7 +114,7 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
                 onClick={() => setActiveTab('CANDIDATES')} 
                 className={`px-6 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'CANDIDATES' ? 'bg-[#14452F] text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}
             >
-                <i className="fas fa-users"></i> Học viên (Ứng viên)
+                <i className="fas fa-users"></i> Học viên (Mới)
             </button>
         </div>
       </div>
@@ -101,7 +124,7 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
          <input 
             type="text" 
-            placeholder={activeTab === 'TEACHERS' ? "Tìm kiếm giảng viên..." : "Tìm kiếm học viên để thăng cấp..."}
+            placeholder={activeTab === 'TEACHERS' ? "Tìm giảng viên (Tên, Email)..." : "Tìm tài khoản mới tạo..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 chamfer-sm text-sm font-bold text-slate-700 outline-none focus:border-[#14452F] transition-all shadow-sm" 
@@ -127,7 +150,9 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-black text-slate-800 text-sm uppercase truncate leading-tight">{user.fullName}</h4>
-                  <p className="text-[10px] text-slate-400 font-mono truncate mt-1">ID: {user.id.substring(0, 8)}...</p>
+                  <p className="text-[10px] text-slate-500 font-mono truncate mt-1">{user.email}</p>
+                  <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5">ID: {user.id.substring(0, 8)}...</p>
+                  
                   <div className="mt-2">
                      <span className={`text-[8px] font-bold px-2 py-0.5 chamfer-sm uppercase ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                         {user.status === 'active' ? 'Đã xác thực' : 'Chờ duyệt'}
