@@ -1,5 +1,4 @@
 
-
 export enum QuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
   ESSAY = 'ESSAY',
@@ -7,13 +6,25 @@ export enum QuestionType {
 
 export type UserRole = 'admin' | 'teacher' | 'student';
 
+export type UserStatus = 'pending' | 'active';
+
 export interface UserProfile {
   id: string;
-  email: string;
-  fullName: string;
   role: UserRole;
+  fullName: string;
+  email?: string;
   avatarUrl?: string;
   classId?: string;
+  status: UserStatus;
+  updatedAt?: number;
+}
+
+export interface Class {
+  id: string;
+  name: string;
+  teacherId?: string;
+  isActive: boolean;
+  createdAt: number;
 }
 
 export type ExamType = 'REGULAR' | '15_MIN' | '45_MIN' | 'MID_TERM' | 'FINAL';
@@ -27,26 +38,51 @@ export interface QuestionFolder {
 
 export interface Question {
   id: string;
-  folderId: string;
-  category: string;
-  type: QuestionType;
-  content: string;
-  options?: string[]; 
-  correctAnswer: string;
-  explanation: string;
+  content: any; // JSONB for question content, answers, etc. or string
+  type: string; // e.g., 'MULTIPLE_CHOICE', 'ESSAY'
+  creatorId?: string;
+  isPublicBank?: boolean;
   createdAt: number;
+  
+  // UI / Extended properties
+  options?: string[];
+  correctAnswer?: string;
+  explanation?: string;
   bloomLevel?: string;
-  image?: string; 
+  category?: string;
+  folderId?: string;
+  image?: string;
+
+  // DB properties
+  bloom_level?: string;
+  is_public_bank?: boolean;
 }
 
 export interface Exam {
   id: string;
   title: string;
-  type: ExamType;
-  questionIds: string[]; 
+  creatorId?: string;
+  sharedWithClassId?: string;
+  config: any; // JSONB for time, number of questions, etc.
   createdAt: number;
-  config: any; 
-  classId?: string; 
+  
+  // UI / Extended properties
+  type?: string;
+  questionIds?: string[];
+  
+  // DB properties
+  question_ids?: string[];
+  class_id?: string;
+  creator_id?: string;
+}
+
+export interface Lecture {
+  id: string;
+  title: string;
+  fileUrl: string;
+  creatorId: string;
+  sharedWithClassId?: string;
+  createdAt: number;
 }
 
 export interface PdfMetadata {

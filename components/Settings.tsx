@@ -24,8 +24,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('app_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-    
-    // FORCE MIGRATION: Nếu phát hiện đang dùng bản 3.0 preview (gây lỗi 429), chuyển ngay về 2.5
     if (parsed.modelName === 'gemini-3-flash-preview') {
         parsed.modelName = 'gemini-2.5-flash';
         localStorage.setItem('app_settings', JSON.stringify(parsed));
@@ -34,15 +32,11 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
   });
 
   const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('USER_GEMINI_KEY') || '');
-  const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
   const [kbSize, setKbSize] = useState(0);
 
   useEffect(() => {
     const kb = JSON.parse(localStorage.getItem('knowledge_base') || '[]');
     setKbSize(kb.length);
-    
-    // Double check migration on mount
     if (settings.modelName === 'gemini-3-flash-preview') {
         const newSettings = { ...settings, modelName: 'gemini-2.5-flash' };
         setSettings(newSettings);
@@ -124,156 +118,138 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
     }
   };
 
-  const handleCheckUpdate = async () => {
-    setIsChecking(true);
-    try {
-      const info = await checkAppUpdate();
-      setUpdateInfo(info);
-      onNotify(info.isUpdateAvailable ? "Phát hiện bản cập nhật mới!" : "Hệ thống đang ở phiên bản mới nhất.", "info");
-    } catch (e) {
-      onNotify("Không thể kết nối máy chủ cập nhật.", "error");
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
   return (
-    <div className="p-8 max-w-6xl mx-auto animate-fade-in space-y-8 pb-24 text-slate-700 font-inter">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm gap-4">
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 bg-blue-600 text-white rounded-3xl flex items-center justify-center text-2xl shadow-2xl shadow-blue-200">
-            <i className="fas fa-gear"></i>
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Cài đặt Hệ thống</h1>
-            <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mt-2">Bảng điều khiển LMS v{pkg.version}</p>
-          </div>
+    <div className="p-8 max-w-7xl mx-auto animate-fade-in space-y-6 pb-24 text-slate-700 font-[Roboto]">
+      
+      {/* New Header Layout: Minimal & Horizontal */}
+      <header className="flex items-center justify-between bg-white p-6 chamfer-lg border-b-4 border-[#14452F] shadow-sm">
+        <div>
+            <h1 className="text-2xl font-black text-[#14452F] uppercase tracking-tighter">Trung tâm Cấu hình</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">DHsystem Core v{pkg.version}</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={saveSettings} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all">Lưu cấu hình</button>
-        </div>
+        <button onClick={saveSettings} className="px-8 py-3 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-[#0F3624] transition-all active:scale-95">
+            Lưu thay đổi
+        </button>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm p-10 space-y-10">
-            <div className="flex flex-col border-b border-slate-50 pb-8 space-y-6">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl bg-blue-50 text-blue-600">
-                        <i className="fas fa-brain"></i>
-                    </div>
-                    <div>
-                        <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm">Cấu hình Gemini AI</h3>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Kích hoạt trí tuệ nhân tạo trợ giảng</p>
-                    </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Data Management (Moved from Right to Left) */}
+        <div className="space-y-6">
+          <section className="bg-slate-900 chamfer-lg p-8 text-white relative overflow-hidden shadow-2xl">
+             <div className="absolute bottom-0 right-0 w-40 h-40 bg-[#14452F] opacity-20 chamfer-diag -mr-10 -mb-10"></div>
+             <h3 className="text-lg font-black mb-6 uppercase tracking-tight flex items-center gap-3 border-b border-white/10 pb-4">
+                <i className="fas fa-server text-[#14452F]"></i> Quản trị Dữ liệu
+             </h3>
+             
+             <div className="space-y-4 relative z-10">
+                <div className="flex justify-between items-center bg-white/5 p-4 chamfer-sm">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Vector RAG</span>
+                    <span className="text-xl font-black text-white">{kbSize}</span>
                 </div>
                 
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <i className="fas fa-key text-blue-500"></i> Cá nhân hóa API Key (USER_GEMINI_KEY)
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={handleExportBackup} className="p-4 bg-blue-600/20 hover:bg-blue-600 border border-blue-500/30 chamfer-sm transition-all group text-center">
+                        <i className="fas fa-download text-blue-400 group-hover:text-white mb-2 text-xl"></i>
+                        <p className="text-[9px] font-black uppercase text-blue-100">Backup</p>
+                    </button>
+                    <label className="p-4 bg-green-600/20 hover:bg-green-600 border border-green-500/30 chamfer-sm transition-all group text-center cursor-pointer">
+                        <i className="fas fa-upload text-green-400 group-hover:text-white mb-2 text-xl"></i>
+                        <p className="text-[9px] font-black uppercase text-green-100">Restore</p>
+                        <input type="file" className="hidden" accept=".json" onChange={handleImportBackup} />
                     </label>
-                    <input 
-                        type="password"
-                        value={userGeminiKey}
-                        onChange={e => setUserGeminiKey(e.target.value)}
-                        placeholder="Nhập API Key cá nhân của bạn..."
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <p className="text-[10px] text-slate-400 italic">
-                        Lưu ý: API Key này sẽ được ưu tiên sử dụng cho các yêu cầu AI của bạn.
-                    </p>
                 </div>
+
+                <button onClick={clearAllData} className="w-full py-3 bg-red-500/10 text-red-400 chamfer-sm font-black text-[10px] uppercase tracking-widest border border-red-500/20 hover:bg-red-600 hover:text-white transition-all mt-4">
+                    <i className="fas fa-trash-alt mr-2"></i> Reset Hệ thống
+                </button>
+             </div>
+          </section>
+
+          <div className="bg-[#E8F5E9] p-6 chamfer-lg border border-[#14452F]/10">
+            <p className="text-[10px] font-black text-[#14452F] uppercase mb-2">Thông tin bản quyền</p>
+            <p className="text-xs text-[#14452F]/80 font-medium leading-relaxed">
+                Hệ thống thuộc bản quyền <strong>DHsystem</strong>. Mọi hành vi sao chép trái phép đều bị nghiêm cấm.
+            </p>
+          </div>
+        </div>
+
+        {/* Right Column: Configuration (Moved from Left to Right, spanning 2 cols) */}
+        <div className="lg:col-span-2 space-y-6">
+          <section className="bg-white chamfer-lg border border-slate-200 chamfer-shadow p-8 h-full">
+            <div className="flex items-center gap-4 mb-8 pb-4 border-b border-slate-100">
+                <div className="w-10 h-10 chamfer-sm flex items-center justify-center bg-[#14452F] text-white">
+                    <i className="fas fa-sliders-h"></i>
+                </div>
+                <h3 className="font-black text-slate-900 uppercase tracking-tight text-lg">Tham số vận hành</h3>
             </div>
 
-            <div className="space-y-10">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                           <i className="fas fa-microchip text-blue-500"></i> Mô hình (Model)
-                        </label>
-                        <select 
-                            value={settings.modelName} 
-                            onChange={e => setSettings({...settings, modelName: e.target.value})} 
-                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Khuyên dùng - Ổn định)</option>
-                            {/* Removed 3.0 Option to prevent errors */}
-                        </select>
-                        <p className="text-[9px] text-slate-400 italic">Phiên bản Gemini 3 Preview đã bị ẩn do vấn đề quá tải hệ thống (429).</p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                           <i className="fas fa-graduation-cap text-purple-500"></i> Chế độ trợ giảng
-                        </label>
-                        <select 
-                            value={settings.systemExpertise} 
-                            onChange={e => setSettings({...settings, systemExpertise: e.target.value as any})} 
-                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none"
-                        >
-                            <option value="ACADEMIC">Hàn lâm / Giảng thuật</option>
-                            <option value="FIELD_EXPERT">Chuyên gia thực tế</option>
-                            <option value="STUDENT_ASSISTANT">Trợ lý học tập</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div className="space-y-8">
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sáng tạo (Temperature)</label>
-                           <span className="font-black text-blue-600 text-sm">{settings.temperature}</span>
-                        </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* API Key Section */}
+                <div className="col-span-full bg-slate-50 p-6 chamfer-md border border-slate-200">
+                    <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest block mb-3">
+                        <i className="fas fa-key mr-2"></i> Google Gemini API Key (Bắt buộc)
+                    </label>
+                    <div className="relative">
                         <input 
-                            type="range" min="0" max="1" step="0.1" 
-                            value={settings.temperature} 
-                            onChange={e => setSettings({...settings, temperature: parseFloat(e.target.value)})} 
-                            className="w-full h-1.5 bg-slate-100 rounded-full appearance-none accent-blue-600 cursor-pointer" 
+                            type="password"
+                            value={userGeminiKey}
+                            onChange={e => setUserGeminiKey(e.target.value)}
+                            placeholder="sk-..."
+                            className="w-full pl-4 pr-4 py-3 bg-white border-2 border-slate-200 chamfer-sm font-bold text-slate-800 outline-none focus:border-[#14452F] transition-all"
                         />
                     </div>
+                    <p className="text-[10px] text-slate-400 mt-2 font-medium italic">Key của bạn được lưu cục bộ trên trình duyệt.</p>
+                </div>
+
+                {/* Model Selection */}
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">AI Model</label>
+                    <select 
+                        value={settings.modelName} 
+                        onChange={e => setSettings({...settings, modelName: e.target.value})} 
+                        className="w-full p-3 bg-white border border-slate-300 chamfer-sm font-bold text-slate-700 outline-none focus:border-[#14452F] shadow-sm"
+                    >
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Standard)</option>
+                    </select>
+                </div>
+
+                {/* Role Selection */}
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Vai trò Trợ lý</label>
+                    <select 
+                        value={settings.systemExpertise} 
+                        onChange={e => setSettings({...settings, systemExpertise: e.target.value as any})} 
+                        className="w-full p-3 bg-white border border-slate-300 chamfer-sm font-bold text-slate-700 outline-none focus:border-[#14452F] shadow-sm"
+                    >
+                        <option value="ACADEMIC">Giảng viên Hàn lâm</option>
+                        <option value="FIELD_EXPERT">Kỹ sư Thực địa</option>
+                        <option value="STUDENT_ASSISTANT">Trợ giảng Thân thiện</option>
+                    </select>
+                </div>
+
+                {/* Temperature Slider */}
+                <div className="col-span-full space-y-4 pt-4 border-t border-slate-100">
+                    <div className="flex justify-between items-center">
+                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Độ sáng tạo (Temperature)</label>
+                       <span className="bg-[#14452F] text-white text-xs font-bold px-2 py-1 chamfer-sm">{settings.temperature}</span>
+                    </div>
+                    <input 
+                        type="range" min="0" max="1" step="0.1" 
+                        value={settings.temperature} 
+                        onChange={e => setSettings({...settings, temperature: parseFloat(e.target.value)})} 
+                        className="w-full h-2 bg-slate-200 appearance-none accent-[#14452F] cursor-pointer chamfer-sm" 
+                    />
+                    <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase">
+                        <span>Chính xác</span>
+                        <span>Cân bằng</span>
+                        <span>Sáng tạo</span>
+                    </div>
                 </div>
             </div>
           </section>
         </div>
 
-        <div className="space-y-8">
-          <section className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-             <h3 className="text-xl font-black mb-6 uppercase tracking-tight flex items-center gap-3">
-                <i className="fas fa-database text-blue-400"></i> Dữ liệu cục bộ
-             </h3>
-             <div className="space-y-6">
-                <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                    <p className="text-[10px] text-slate-400 font-black uppercase mb-1">Dung lượng tri thức RAG</p>
-                    <p className="text-4xl font-black">{kbSize} <span className="text-sm font-bold text-slate-500 tracking-normal">Đoạn</span></p>
-                </div>
-                <button onClick={clearAllData} className="w-full py-4 bg-red-500/10 text-red-400 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all">
-                    Xóa sạch dữ liệu bài học
-                </button>
-             </div>
-          </section>
-
-          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm p-10 space-y-6">
-             <h3 className="font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                <i className="fas fa-cloud-arrow-down text-blue-600"></i> Sao lưu & Phục hồi
-             </h3>
-             <div className="space-y-3">
-                <button onClick={handleExportBackup} className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-2xl hover:bg-blue-50 transition-all group">
-                    <div className="flex items-center gap-3">
-                        <i className="fas fa-file-export text-slate-400 group-hover:text-blue-600"></i>
-                        <span className="text-xs font-black uppercase tracking-widest text-slate-600">Xuất Sao lưu (.json)</span>
-                    </div>
-                </button>
-                <label className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-2xl hover:bg-blue-50 transition-all group cursor-pointer border border-dashed border-slate-200">
-                    <div className="flex items-center gap-3">
-                        <i className="fas fa-file-import text-slate-400 group-hover:text-blue-600"></i>
-                        <span className="text-xs font-black uppercase tracking-widest text-slate-600">Nhập Sao lưu</span>
-                    </div>
-                    <input type="file" className="hidden" accept=".json" onChange={handleImportBackup} />
-                </label>
-             </div>
-          </section>
-        </div>
       </div>
     </div>
   );

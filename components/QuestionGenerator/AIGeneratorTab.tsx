@@ -80,26 +80,26 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in">
-       <div className="border-2 border-dashed border-gray-200 p-16 rounded-[3rem] text-center bg-gray-50 hover:border-blue-300 transition-all relative cursor-pointer group">
+       <div className="border-2 border-dashed border-slate-200 p-16 chamfer-lg text-center bg-slate-50 hover:border-[#14452F]/50 hover:bg-[#E8F5E9]/50 transition-all relative cursor-pointer group">
           <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setPdfFile(e.target.files?.[0] || null)} />
-          <i className={`fas ${pdfFile ? 'fa-file-circle-check text-green-500' : 'fa-cloud-upload-alt text-gray-300'} text-5xl mb-4 group-hover:scale-110 transition-transform`}></i>
-          <p className="font-bold text-gray-600">{pdfFile ? pdfFile.name : "Kéo thả hoặc chọn giáo trình PDF để AI biên soạn đề"}</p>
-          <p className="text-[10px] text-gray-400 mt-2 font-black uppercase tracking-widest">Hỗ trợ tối đa 15,000 ký tự tri thức</p>
+          <i className={`fas ${pdfFile ? 'fa-file-circle-check text-green-600' : 'fa-cloud-upload-alt text-slate-300'} text-5xl mb-4 group-hover:scale-110 transition-transform`}></i>
+          <p className="font-bold text-slate-600">{pdfFile ? pdfFile.name : "Kéo thả hoặc chọn giáo trình PDF để AI biên soạn đề"}</p>
+          <p className="text-[10px] text-slate-400 mt-2 font-black uppercase tracking-widest">Hỗ trợ tối đa 15,000 ký tự tri thức</p>
        </div>
        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                <i className="fas fa-th-large text-blue-500"></i> Ma trận câu hỏi theo Bloom
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <i className="fas fa-th-large text-[#14452F]"></i> Ma trận câu hỏi theo Bloom
             </label>
             <div className="grid grid-cols-3 gap-2">
               {BLOOM_LEVELS.map(l => (
-                <div key={l} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
-                  <label className="text-[9px] font-black text-gray-400 block text-center truncate mb-1 uppercase">{l}</label>
+                <div key={l} className="bg-white p-3 chamfer-sm border border-slate-100 shadow-sm focus-within:border-[#14452F] transition-colors">
+                  <label className="text-[9px] font-black text-slate-400 block text-center truncate mb-1 uppercase">{l}</label>
                   <input 
                     type="number" min="0" 
                     value={bloomCounts[l]} 
                     onChange={e => setBloomCounts({...bloomCounts, [l]: parseInt(e.target.value)||0})} 
-                    className="w-full text-center font-black text-blue-600 outline-none bg-transparent" 
+                    className="w-full text-center font-black text-[#14452F] outline-none bg-transparent" 
                   />
                 </div>
               ))}
@@ -107,19 +107,19 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
           </div>
           <div className="space-y-6">
             <div className="space-y-3">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                <i className="fas fa-cog text-blue-500"></i> Cấu hình loại đề
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <i className="fas fa-cog text-[#14452F]"></i> Cấu hình loại đề
               </label>
-              <div className="flex gap-2 bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+              <div className="flex gap-2 bg-slate-50 p-1.5 chamfer-sm border border-slate-100">
                 <button 
                   onClick={() => setQType(QuestionType.MULTIPLE_CHOICE)} 
-                  className={`flex-1 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${qType === QuestionType.MULTIPLE_CHOICE ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`flex-1 py-3 chamfer-sm font-black text-[11px] uppercase tracking-widest transition-all ${qType === QuestionType.MULTIPLE_CHOICE ? 'bg-white text-[#14452F] chamfer-shadow' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   Trắc nghiệm
                 </button>
                 <button 
                   onClick={() => setQType(QuestionType.ESSAY)} 
-                  className={`flex-1 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${qType === QuestionType.ESSAY ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`flex-1 py-3 chamfer-sm font-black text-[11px] uppercase tracking-widest transition-all ${qType === QuestionType.ESSAY ? 'bg-white text-[#14452F] chamfer-shadow' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   Tự luận
                 </button>
@@ -128,7 +128,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
             <button 
               onClick={handleGenerate} 
               disabled={isLoading || !pdfFile || totalQuestions === 0} 
-              className="w-full bg-blue-600 text-white px-12 py-5 rounded-2xl font-black shadow-2xl disabled:bg-gray-200 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 text-xs uppercase tracking-widest"
+              className="w-full bg-[#14452F] text-white px-12 py-5 chamfer-md font-black chamfer-shadow disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 text-xs uppercase tracking-widest"
             >
               {isLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-wand-magic-sparkles"></i>}
               {isLoading ? "ĐANG PHÂN TÍCH TÀI LIỆU..." : "AI BIÊN SOẠN NGAY"}

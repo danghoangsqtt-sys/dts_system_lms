@@ -1,202 +1,152 @@
+
 <!DOCTYPE html>
 <html lang="vi">
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hệ thống LMS - Quản lý Đào tạo & Khảo thí</title>
+    <title>Hệ thống Quản lý Học tập ĐTS - EduSmart</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Fonts: Roboto (Vietnamese supported) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 
     <style>
       :root {
-        --primary-blue: #2563eb;
-        --bg-soft: #f8fafc;
+        --edu-bg: #F0F2F5;            
+        --edu-surface: #FFFFFF;       
+        
+        /* Main Brand Color: Deep Forest Green */
+        --edu-primary: #14452F;       
+        --edu-primary-hover: #0F3624;
+        --edu-accent: #E8F5E9;        
+        
+        --edu-text-main: #1F2937;     
+        --edu-text-muted: #6B7280;    
+        
+        --edu-border: #E5E7EB;        
+        --font-main: 'Roboto', sans-serif;
       }
       
       html { font-size: 14px; }
+      
       body { 
-        font-family: 'Inter', sans-serif; 
-        background-color: #f8fafc;
+        font-family: var(--font-main); 
+        background-color: var(--edu-bg);
+        color: var(--edu-text-main);
         margin: 0; padding: 0;
         overflow: hidden;
+        -webkit-font-smoothing: antialiased;
       }
 
-      /* Splash Screen Styles */
+      /* --- CHAMFERED UTILITIES (CẮT VÁT) --- */
+      /* Cắt 4 góc */
+      .chamfer-sm { clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px); }
+      .chamfer-md { clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+      .chamfer-lg { clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px); }
+      
+      /* Cắt 2 góc chéo (TopLeft - BottomRight) */
+      .chamfer-diag { clip-path: polygon(15px 0, 100% 0, 100% 100%, calc(100% - 15px) 100%, 0 100%, 0 15px); }
+
+      /* Vì clip-path cắt mất shadow, ta dùng filter drop-shadow cho các thành phần quan trọng */
+      .chamfer-shadow { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
+      .chamfer-shadow-lg { filter: drop-shadow(0 10px 15px rgba(20, 69, 47, 0.15)); }
+
+      /* Buttons mặc định sẽ dùng chamfer-sm */
+      button, .btn, input, select, textarea {
+        border-radius: 0 !important; /* Reset rounded */
+      }
+
+      /* --- COMPONENT CLASSES --- */
+      
+      .edu-card {
+        background-color: var(--edu-surface);
+        border: 1px solid var(--edu-border);
+        /* Thay rounded bằng clip-path cho style hiện đại */
+        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+        transition: all 0.3s ease;
+      }
+      
+      /* Scrollbars */
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--edu-primary); }
+
+      /* Loading Screen */
       #app-loader {
         position: fixed; inset: 0;
-        background: #0f172a;
+        background: var(--edu-surface);
         display: flex; flex-direction: column;
         align-items: center; justify-content: center;
         z-index: 99999;
-        transition: opacity 0.5s ease-out;
       }
-      .loader-spin {
-        width: 60px; height: 60px;
-        border: 4px solid rgba(37, 99, 235, 0.1);
-        border-top: 4px solid #2563eb;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
+      .loader-bar {
+        width: 200px; height: 4px;
+        background: #E5E7EB;
+        position: relative;
+        margin-top: 20px;
+        overflow: hidden;
       }
-      @keyframes spin { to { transform: rotate(360deg); } }
-
-      #panic-screen {
-        display: none;
-        position: fixed; inset: 0;
-        background: #450a0a; color: white;
-        z-index: 100000; padding: 40px;
-        font-family: 'Inter', monospace; overflow: auto;
+      .loader-bar::after {
+        content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 50%;
+        background: var(--edu-primary);
+        animation: loading 1s infinite ease-in-out;
       }
-
-      .status-text {
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.3em;
-        color: #64748b;
-        margin-top: 30px;
-        text-align: center;
-      }
-
-      .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-      }
-      .custom-scrollbar::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 10px;
-      }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-      }
+      @keyframes loading { 0% { left: -50%; } 100% { left: 100%; } }
 
       /* Animations */
-      @keyframes fade-in-up {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-fade-in-up {
-        animation: fade-in-up 0.5s ease-out forwards;
-      }
-      @keyframes fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      .animate-fade-in {
-        animation: fade-in 0.3s ease-out forwards;
-      }
+      .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      
+      .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
     </style>
 
     <script>
-      window.bootLogs = [];
-      function logBoot(msg, type = 'info') {
-        const entry = `[${new Date().toLocaleTimeString()}] [${type.toUpperCase()}] ${msg}`;
-        window.bootLogs.push(entry);
-        console.log(entry);
-        const statusEl = document.getElementById('loader-status');
-        if (statusEl) statusEl.innerText = msg;
-      }
-
-      window.onerror = function(message, source, lineno, colno, error) {
-        logBoot(`${message}`, 'error');
-        showPanicScreen();
-      };
-
-      function showPanicScreen() {
-        const panic = document.getElementById('panic-screen');
-        const loader = document.getElementById('app-loader');
-        if (panic) {
-          panic.style.display = 'block';
-          if (loader) loader.style.display = 'none';
-          const logsEl = document.getElementById('panic-logs');
-          if (logsEl) logsEl.innerText = window.bootLogs.join('\n');
-        }
-      }
-
-      const bootTimeout = setTimeout(() => {
-        logBoot("Lỗi: Timeout khởi động hệ thống.", 'warning');
-        showPanicScreen();
-      }, 20000);
-
       window.markAppAsReady = () => {
-        clearTimeout(bootTimeout);
         const loader = document.getElementById('app-loader');
         if (loader) {
           loader.style.opacity = '0';
+          loader.style.transition = 'opacity 0.5s ease';
           setTimeout(() => loader.style.display = 'none', 500);
         }
-        document.body.style.overflow = 'auto';
-        logBoot("Hệ thống LMS đã sẵn sàng.");
       };
-
-      document.addEventListener('DOMContentLoaded', () => {
-        logBoot("Đang khởi tạo nhân hệ thống...");
-        setTimeout(() => logBoot("Đang nạp thuật toán RAG & Grounding..."), 1000);
-      });
     </script>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.624",
-    "pdfjs-dist/": "https://esm.sh/pdfjs-dist@^5.4.624/",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3"
-  }
-}
-</script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@^19.2.4",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+        "react/": "https://esm.sh/react@^19.2.4/",
+        "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+        "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+        "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.624",
+        "pdfjs-dist/": "https://esm.sh/pdfjs-dist@^5.4.624/",
+        "vite": "https://esm.sh/vite@^7.3.1",
+        "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
+        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3",
+        "react-dom": "https://esm.sh/react-dom@^19.2.4"
+      }
+    }
+    </script>
 </head>
   <body>
-    <!-- Splash Loader -->
     <div id="app-loader">
-        <div class="loader-spin"></div>
-        <div class="mt-10 flex items-center gap-4">
-            <i class="fas fa-graduation-cap text-blue-500 text-3xl"></i>
-            <h2 class="text-white font-black text-2xl tracking-tighter">LMS Core System</h2>
-        </div>
-        <p id="loader-status" class="status-text animate-pulse">Đang nạp mô hình tri thức...</p>
-        <div class="mt-12 flex gap-4">
-            <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></div>
-            <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping [animation-delay:0.2s]"></div>
-            <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping [animation-delay:0.4s]"></div>
-        </div>
+        <i class="fas fa-square-full text-4xl text-[#14452F] animate-spin"></i>
+        <div class="loader-bar"></div>
+        <p style="margin-top: 10px; font-family: 'Roboto', sans-serif; font-size: 10px; color: #14452F; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;">System Initializing</p>
     </div>
-
-    <!-- Panic Screen -->
-    <div id="panic-screen">
-        <div class="max-w-4xl mx-auto">
-            <h1 class="text-4xl font-black mb-6 flex items-center gap-5 text-red-400">
-                <i class="fas fa-triangle-exclamation"></i> LỖI KHỞI ĐỘNG CHUỖI CUNG ỨNG AI
-            </h1>
-            <p class="mb-10 text-xl opacity-80 font-medium leading-relaxed">Ứng dụng không thể kết nối tới Google Gemini hoặc thư viện đồ họa. Vui lòng kiểm tra kết nối internet.</p>
-            
-            <div class="mb-12">
-                <div class="bg-black/40 p-8 rounded-[2.5rem] border border-white/10 shadow-2xl">
-                    <h3 class="text-xs font-black mb-4 text-yellow-500 uppercase tracking-widest">Chi tiết kỹ thuật (System Logs):</h3>
-                    <pre id="panic-logs" class="text-[12px] leading-relaxed font-mono text-slate-300"></pre>
-                </div>
-            </div>
-
-            <div class="flex gap-6">
-                <button onclick="window.location.reload()" class="bg-blue-600 text-white px-10 py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:bg-blue-500 transition-all">Thử lại</button>
-            </div>
-        </div>
-    </div>
-
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   </body>

@@ -22,11 +22,10 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
   const [input, setInput] = useState('');
   const [hasKey, setHasKey] = useState(false);
   
-  // Custom initial message based on role
   const getInitialMessage = () => {
-      if (user?.role === 'teacher') return `Xin chào Giảng viên ${user.fullName}. Tôi là Trợ giảng ảo của thầy/cô. Hôm nay thầy/cô cần hỗ trợ soạn bài hay tra cứu tài liệu?`;
-      if (user?.role === 'admin') return `Hệ thống sẵn sàng. Admin ${user.fullName} cần tra cứu thông số gì?`;
-      return `Chào em ${user?.fullName || 'bạn'}. Thầy là Trợ lý AI môn Nguồn điện an toàn. Em đang ôn tập phần nào thế?`;
+      if (user?.role === 'teacher') return `Xin chào Giảng viên ${user.fullName}. Tôi có thể hỗ trợ gì cho giáo án hôm nay?`;
+      if (user?.role === 'admin') return `Hệ thống sẵn sàng. Xin chào Quản trị viên ${user.fullName}.`;
+      return `Chào ${user?.fullName || 'bạn'}. Tôi là trợ lý học tập AI. Bạn cần giải đáp thắc mắc gì về môn học?`;
   };
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,7 +33,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
   const [activeModel, setActiveModel] = useState<string>(''); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize welcome message when user loads
   useEffect(() => {
       if (user && messages.length === 0) {
           setMessages([{
@@ -65,7 +63,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
     if (!input.trim() || isLoading) return;
     
     if (!hasKey) {
-        onNotify?.("Vui lòng cấu hình API Key trong cài đặt để sử dụng AI.", "warning");
+        onNotify?.("Vui lòng nhập API KEY trong phần Cài đặt.", "warning");
         return;
     }
 
@@ -87,7 +85,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
             parts: [{ text: m.text }]
         }));
 
-        // Pass 'user' object to service for role-based persona
         const response = await generateChatResponse(
             history, 
             userMsg.text, 
@@ -101,7 +98,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
         const modelMsg: ChatMessage = {
             id: (Date.now() + 1).toString(),
             role: 'model',
-            text: response.text || "Xin lỗi, tôi chưa hiểu ý bạn.",
+            text: response.text || "Lỗi: Không thể tạo phản hồi.",
             timestamp: Date.now(),
             sources: response.sources,
             isRAG: response.sources.some(s => s.title.includes('Giáo trình'))
@@ -109,16 +106,10 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
         
         setMessages((prev) => [...prev, modelMsg]);
     } catch (error: any) {
-        let errorText = 'Hệ thống gặp lỗi kết nối AI. Vui lòng thử lại sau.';
-        
-        if (error.toString().includes('429') || error.toString().includes('RESOURCE_EXHAUSTED')) {
-          errorText = '⚠️ **Hệ thống đang quá tải**: Vui lòng đợi 30 giây rồi thử lại. (Gợi ý: Dùng API Key cá nhân trong Cài đặt để ổn định hơn).';
-        }
-
         setMessages((prev) => [...prev, {
             id: Date.now().toString(),
             role: 'model',
-            text: errorText,
+            text: "Không thể xử lý yêu cầu. Vui lòng kiểm tra kết nối mạng.",
             timestamp: Date.now()
         }]);
     } finally {
@@ -126,67 +117,71 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
     }
   };
 
+  // Styles cho hiệu ứng cắt vát (Chamfered)
+  const chamferedStyle = {
+    clipPath: 'polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%)'
+  };
+
   return (
-    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end pointer-events-none">
+    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end pointer-events-none font-[Roboto]">
       {isOpen && (
-        <div className="bg-white w-[380px] sm:w-[450px] max-w-[calc(100vw-3rem)] h-[680px] max-h-[calc(100vh-120px)] rounded-[2.5rem] shadow-[0_30px_90px_-15px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden border border-slate-100 mb-6 animate-fade-in-up pointer-events-auto ring-1 ring-slate-900/5">
+        <div 
+            className="bg-white w-[400px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-100px)] shadow-2xl flex flex-col pointer-events-auto animate-slide-up mb-4 border border-[#14452F]/20"
+            style={{ 
+                borderTopLeftRadius: '20px', 
+                borderBottomRightRadius: '20px',
+                borderTopRightRadius: '0',
+                borderBottomLeftRadius: '0' 
+            }}
+        >
           
-          <div className="bg-[#0f172a] p-5 flex justify-between items-center shrink-0 border-b border-white/5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-            <div className="flex items-center gap-4 relative z-10">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center text-white shadow-lg relative">
-                    <i className="fas fa-robot text-xl"></i>
-                    {/* Role Badge */}
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center border-2 border-blue-700">
-                        {user?.role === 'teacher' ? <i className="fas fa-chalkboard-user text-[8px] text-blue-600"></i> : <i className="fas fa-graduation-cap text-[8px] text-blue-600"></i>}
-                    </div>
+          {/* Header - Styled with #14452F and angular cuts */}
+          <div className="bg-[#14452F] p-5 flex justify-between items-center shrink-0 rounded-tl-[18px]">
+            <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-white/10 flex items-center justify-center relative" style={chamferedStyle}>
+                    <i className="fas fa-robot text-white text-lg"></i>
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-2 border-[#14452F] rounded-full"></div>
                 </div>
                 <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-white font-black text-[14px] leading-none tracking-tight">
-                          {user?.role === 'teacher' ? 'Trợ Giảng AI' : 'Thầy Giáo AI'}
-                      </h4>
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
-                    </div>
-                    {activeModel && activeModel.includes('1.5') ? (
-                       <span className="text-[9px] font-bold text-orange-400 uppercase tracking-widest mt-1.5 flex items-center gap-1">
-                         <i className="fas fa-shield-cat"></i> Fallback Mode
-                       </span>
-                    ) : (
-                       <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-widest mt-1.5 block">
-                           {user?.role === 'teacher' ? 'Professional Assistant' : 'Personal Tutor'}
-                       </span>
-                    )}
+                    <h3 className="text-white font-bold text-sm uppercase tracking-wider">Trợ lý AI ĐTS</h3>
+                    <p className="text-[10px] text-white/60 font-medium">Sẵn sàng hỗ trợ học tập</p>
                 </div>
             </div>
-            <div className="flex gap-2 relative z-10">
+            <div className="flex gap-2">
                 <button 
                   onClick={() => setMode(mode === 'TEXT' ? 'LIVE' : 'TEXT')} 
-                  className={`w-10 h-10 rounded-xl transition-all flex items-center justify-center ${mode === 'LIVE' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-slate-400 hover:text-white'}`}
+                  className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border transition-all ${mode === 'LIVE' ? 'bg-red-500 text-white border-red-500' : 'bg-transparent text-white/80 border-white/30 hover:bg-white/10'}`}
+                  style={chamferedStyle}
                 >
-                   <i className={`fas ${mode === 'TEXT' ? 'fa-microphone' : 'fa-comment-dots'}`}></i>
+                   {mode === 'TEXT' ? 'Voice Mode' : 'Text Mode'}
                 </button>
                 <button 
                   onClick={() => setIsOpen(false)} 
-                  className="w-10 h-10 rounded-xl bg-white/5 text-slate-400 hover:text-white transition flex items-center justify-center"
+                  className="w-8 h-8 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                  style={{ clipPath: 'polygon(20% 0, 100% 0, 100% 80%, 80% 100%, 0 100%, 0 20%)' }}
                 >
-                    <i className="fas fa-times text-sm"></i>
+                    <i className="fas fa-times"></i>
                 </button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden bg-slate-50 flex flex-col relative">
+          <div className="flex-1 overflow-hidden bg-[#F8FAFC] flex flex-col relative rounded-br-[18px]">
             {!hasKey ? (
-                <div className="h-full flex flex-col items-center justify-center p-10 text-center space-y-6">
-                    <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-3xl shadow-inner">
+                <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 text-slate-400">
+                    <div className="w-20 h-20 bg-slate-100 flex items-center justify-center text-4xl text-[#14452F]" style={chamferedStyle}>
                         <i className="fas fa-key"></i>
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-slate-800 tracking-tight">Kích hoạt Trí tuệ AI</h3>
-                        <p className="text-slate-500 text-xs font-medium leading-relaxed mt-2">Học viên cần sử dụng Gemini API Key cá nhân để trò chuyện trực tiếp với Trợ lý học tập.</p>
+                        <h3 className="text-sm font-bold text-[#14452F] uppercase tracking-widest mb-2">Yêu cầu cấu hình</h3>
+                        <p className="text-xs max-w-[200px] mx-auto">Vui lòng nhập Google Gemini API Key của bạn trong phần cài đặt để kích hoạt trợ lý.</p>
                     </div>
-                    <Link to="/settings" onClick={() => setIsOpen(false)} className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all">
-                        Cấu hình API Key ngay
+                    <Link 
+                        to="/settings" 
+                        onClick={() => setIsOpen(false)} 
+                        className="px-6 py-3 bg-[#14452F] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#0F3624] transition-all"
+                        style={chamferedStyle}
+                    >
+                        Đi tới Cài đặt
                     </Link>
                 </div>
             ) : mode === 'LIVE' ? (
@@ -195,76 +190,86 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
                 </div>
             ) : (
                 <div className="h-full flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
                         {messages.map((msg) => (
-                            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                                <div className={`max-w-[90%] p-4 rounded-[1.8rem] text-[13.5px] shadow-sm relative ${
-                                  msg.role === 'user' 
-                                    ? 'bg-blue-600 text-white rounded-tr-none' 
-                                    : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none ring-1 ring-slate-200/50'
-                                }`}>
+                            <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                <div 
+                                    className={`max-w-[85%] p-4 text-sm shadow-sm relative ${
+                                        msg.role === 'user' 
+                                            ? 'bg-[#14452F] text-white' 
+                                            : 'bg-white border border-gray-200 text-slate-800'
+                                    }`}
+                                    style={{
+                                        clipPath: msg.role === 'user' 
+                                            ? 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)'
+                                            : 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))'
+                                    }}
+                                >
                                     {msg.role === 'model' && msg.isRAG && (
-                                        <div className="flex items-center gap-1.5 mb-2.5 text-[9px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100 w-fit uppercase tracking-tighter">
-                                            <i className="fas fa-brain-circuit"></i> GIÁO TRÌNH
+                                        <div className="text-[9px] font-black text-[#14452F] mb-2 uppercase tracking-widest flex items-center gap-1 border-b border-gray-100 pb-1">
+                                            <i className="fas fa-database"></i> Dữ liệu cục bộ
                                         </div>
                                     )}
-                                    <div className="leading-relaxed font-medium">
+                                    <div className="leading-relaxed whitespace-pre-wrap">
                                       {formatContent(msg.text)}
                                     </div>
                                     {msg.sources && msg.sources.length > 0 && (
-                                        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                                        <div className={`mt-3 pt-2 border-t flex flex-wrap gap-2 ${msg.role === 'user' ? 'border-white/20' : 'border-gray-100'}`}>
                                             {msg.sources.map((src, idx) => (
                                                 <a 
-                                                  key={idx} 
-                                                  href={src.uri} 
-                                                  target="_blank" 
-                                                  rel="noreferrer" 
-                                                  className="text-[9px] font-bold bg-slate-50 text-blue-600 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-blue-50 transition-all flex items-center gap-2"
+                                                    key={idx} 
+                                                    href={src.uri} 
+                                                    target="_blank" 
+                                                    rel="noreferrer" 
+                                                    className={`text-[9px] px-2 py-1 uppercase font-bold transition-all hover:underline ${
+                                                        msg.role === 'user' 
+                                                            ? 'bg-white/10 text-white' 
+                                                            : 'bg-[#14452F]/5 text-[#14452F]'
+                                                    }`}
                                                 >
-                                                    <i className="fas fa-link text-[8px]"></i> {src.title || "Tham khảo"}
+                                                    Ref: {src.title || "Link"}
                                                 </a>
                                             ))}
                                         </div>
                                     )}
                                 </div>
+                                <span className="text-[9px] text-slate-400 mt-1.5 uppercase font-bold tracking-wider px-1">
+                                    {msg.role === 'user' ? 'Bạn' : 'Trợ lý AI'}
+                                </span>
                             </div>
                         ))}
                         {isLoading && (
-                            <div className="flex justify-start">
-                                <div className="bg-white border border-slate-100 p-4 rounded-3xl rounded-tl-none flex items-center gap-1.5 shadow-sm">
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                            <div className="flex items-start">
+                                <div className="bg-white p-4 border border-gray-200" style={{ clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))' }}>
+                                    <div className="flex space-x-1.5">
+                                        <div className="w-1.5 h-1.5 bg-[#14452F] animate-bounce"></div>
+                                        <div className="w-1.5 h-1.5 bg-[#14452F] animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                                        <div className="w-1.5 h-1.5 bg-[#14452F] animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                                    </div>
                                 </div>
                             </div>
                         )}
                         <div ref={messagesEndRef} />
                     </div>
 
-                    <div className="p-4 bg-white border-t border-slate-100 shrink-0">
-                        {activeModel && activeModel.includes('1.5') && (
-                            <div className="mb-3 flex justify-center animate-fade-in-up">
-                                <div className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-[9px] font-black border border-orange-100 flex items-center gap-1.5">
-                                    <i className="fas fa-triangle-exclamation"></i>
-                                    Chế độ tiết kiệm (1.5 Flash)
-                                </div>
-                            </div>
-                        )}
-                        <div className="flex items-center gap-3 p-1.5 bg-slate-50 border border-slate-200 rounded-[2.2rem] focus-within:ring-4 focus-within:ring-blue-500/5 transition-all">
+                    <div className="p-4 bg-white border-t border-slate-100">
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 transition-colors focus-within:border-[#14452F] focus-within:bg-white focus-within:shadow-sm" style={chamferedStyle}>
                             <input
                               type="text"
                               value={input}
                               onChange={(e) => setInput(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                              placeholder={user?.role === 'teacher' ? "Nhập yêu cầu soạn bài, tra cứu..." : "Hỏi thầy về bài học..."}
-                              className="flex-1 bg-transparent px-4 py-2 text-[14px] outline-none font-medium text-slate-700 placeholder:text-slate-400"
+                              placeholder="Nhập câu hỏi của bạn..."
+                              className="flex-1 bg-transparent border-none text-slate-800 text-sm outline-none placeholder:text-slate-400 px-3 font-medium"
+                              autoFocus
                             />
                             <button
                               onClick={handleSendMessage}
                               disabled={isLoading || !input.trim()}
-                              className="bg-blue-600 text-white w-11 h-11 rounded-full flex items-center justify-center hover:bg-blue-700 transition shadow-lg disabled:bg-slate-300 shrink-0"
+                              className="w-10 h-10 bg-[#14452F] text-white flex items-center justify-center hover:bg-[#0F3624] disabled:opacity-50 disabled:bg-slate-300 transition-all"
+                              style={{ clipPath: 'polygon(20% 0, 100% 0, 100% 80%, 80% 100%, 0 100%, 0 20%)' }}
                             >
-                              <i className="fas fa-paper-plane text-[14px]"></i>
+                              <i className="fas fa-paper-plane text-xs"></i>
                             </button>
                         </div>
                     </div>
@@ -274,13 +279,15 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
         </div>
       )}
 
+      {/* Floating Toggle Button - Chamfered & Green */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-16 h-16 rounded-[2rem] shadow-2xl flex items-center justify-center text-2xl transition-all transform hover:scale-105 active:scale-95 border-4 border-white relative group overflow-hidden pointer-events-auto ${
-          isOpen ? 'bg-slate-900 text-white' : 'bg-blue-600 text-white'
+        className={`w-16 h-16 flex items-center justify-center text-2xl transition-all pointer-events-auto shadow-[0_10px_30px_rgba(20,69,47,0.3)] hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(20,69,47,0.4)] ${
+          isOpen ? 'bg-slate-800 text-white' : 'bg-[#14452F] text-white'
         }`}
+        style={{ clipPath: 'polygon(20% 0, 100% 0, 100% 80%, 80% 100%, 0 100%, 0 20%)' }}
       >
-        <i className={`fas ${isOpen ? 'fa-times' : 'fa-robot'} transition-all duration-300`}></i>
+        <i className={`fas ${isOpen ? 'fa-times' : 'fa-comment-dots'}`}></i>
       </button>
     </div>
   );

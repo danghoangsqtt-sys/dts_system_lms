@@ -242,49 +242,59 @@ const LiveChat: React.FC<LiveChatProps> = ({ voiceName = 'Kore', onClose }) => {
       return () => { stopSession(); };
   }, []);
 
+  // Chamfered button style
+  const buttonStyle = { clipPath: 'polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px)' };
+
   return (
-    <div className="h-full flex flex-col items-center justify-center p-6 bg-slate-900 text-white font-inter">
-      <div className="mb-8 relative">
-        <div className={`absolute -inset-10 bg-blue-500/10 rounded-full blur-2xl transition-transform duration-700 ${isConnected ? 'scale-150 animate-pulse' : 'scale-0'}`}></div>
-        <div className={`w-32 h-32 rounded-3xl flex items-center justify-center bg-white/5 border-2 border-white/10 transition-all duration-500 shadow-2xl ${isConnected ? "scale-110 border-blue-400 bg-blue-500/20" : ""}`}>
-            <i className={`fas ${isInitializing ? 'fa-circle-notch fa-spin' : isConnected ? 'fa-volume-high' : 'fa-microphone'} text-5xl`}></i>
+    <div className="h-full flex flex-col items-center justify-center p-6 bg-slate-900 text-white font-[Roboto] relative overflow-hidden">
+      {/* Background Pulse Effect */}
+      <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-[#14452F]/20 blur-3xl transition-all duration-1000 ${isConnected ? 'scale-150 opacity-100 animate-pulse' : 'scale-50 opacity-0'}`}></div>
+
+      <div className="mb-8 relative z-10">
+        <div 
+            className={`w-32 h-32 flex items-center justify-center bg-[#14452F]/10 border-2 transition-all duration-500 shadow-[0_0_40px_rgba(20,69,47,0.4)] ${isConnected ? "scale-110 border-[#14452F] bg-[#14452F]/30" : "border-slate-700"}`}
+            style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} // Hexagon shape
+        >
+            <i className={`fas ${isInitializing ? 'fa-circle-notch fa-spin' : isConnected ? 'fa-volume-high' : 'fa-microphone'} text-5xl ${isConnected ? 'text-green-400' : 'text-slate-500'}`}></i>
         </div>
       </div>
 
-      <div className="text-center space-y-2 mb-10">
-        <h3 className="text-2xl font-black">Giảng viên AI (DHSYSTEM)</h3>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">
-            {isInitializing ? "Đang khởi tạo Worklet..." : isConnected ? "Đang học tập trực tuyến" : "Vấn đáp bằng giọng nói (Công nghệ Low-Latency)"}
+      <div className="text-center space-y-2 mb-10 z-10">
+        <h3 className="text-xl font-bold uppercase tracking-tight">Giảng viên AI (Voice Mode)</h3>
+        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">
+            {isInitializing ? "Đang kết nối..." : isConnected ? "Đang đàm thoại trực tuyến" : "Vấn đáp thời gian thực (Low-Latency)"}
         </p>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-500/20 border border-red-500/30 px-6 py-3 rounded-2xl text-center max-w-xs animate-shake">
-            <p className="text-red-200 text-[10px] font-black uppercase tracking-tight">{error}</p>
+        <div className="mb-6 bg-red-500/10 border border-red-500/30 px-6 py-3 text-center max-w-xs animate-shake z-10" style={buttonStyle}>
+            <p className="text-red-300 text-[10px] font-black uppercase tracking-tight">{error}</p>
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 z-10">
         {!isConnected ? (
             <button
             onClick={startSession}
             disabled={isInitializing}
-            className="px-14 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-500 transition-all shadow-xl flex items-center gap-3 active:scale-95 disabled:opacity-50 uppercase tracking-widest text-sm"
+            className="px-8 py-4 bg-[#14452F] text-white font-black hover:bg-[#0F3624] transition-all shadow-xl flex items-center gap-3 active:scale-95 disabled:opacity-50 uppercase tracking-widest text-[10px]"
+            style={buttonStyle}
             >
-            <i className="fas fa-play"></i> BẮT ĐẦU VẤN ĐÁP
+            <i className="fas fa-play"></i> BẮT ĐẦU
             </button>
         ) : (
             <button
             onClick={stopSession}
-            className="px-14 py-4 bg-red-500 text-white rounded-2xl font-black hover:bg-red-600 transition-all shadow-xl flex items-center gap-3 active:scale-95 uppercase tracking-widest text-sm"
+            className="px-8 py-4 bg-red-600 text-white font-black hover:bg-red-700 transition-all shadow-xl flex items-center gap-3 active:scale-95 uppercase tracking-widest text-[10px]"
+            style={buttonStyle}
             >
             <i className="fas fa-stop"></i> KẾT THÚC
             </button>
         )}
       </div>
       
-      <div className="mt-auto pt-6 text-[9px] text-white/20 font-black uppercase tracking-[0.3em] text-center">
-         Audio Engine: Web Audio Worklet v2
+      <div className="mt-auto pt-6 text-[9px] text-white/20 font-black uppercase tracking-[0.3em] text-center z-10">
+         Powered by Gemini 2.5 Flash Audio
       </div>
     </div>
   );

@@ -1,22 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
+import { Class, UserProfile } from '../../types';
 
-interface Class {
-  id: string;
-  name: string;
-  teacher_id: string | null;
-  is_active: boolean;
-  teacher_name?: string;
+interface ClassWithTeacher extends Class {
+  teacherName?: string;
 }
 
 interface ClassManagerProps {
-  onNotify: (message: string, type: any) => void;
+  onNotify: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
+  const [classes, setClasses] = useState<ClassWithTeacher[]>([]);
+  const [teachers, setTeachers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -26,23 +24,42 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
     try {
       const { data: classData, error: classError } = await supabase
         .from('classes')
-        .select('*, profiles(full_name)');
+        .select('*, teacher:teacher_id(full_name)')
+        .order('created_at', { ascending: false });
       
+      if (classError) throw classError;
+
       const { data: teacherData, error: teacherError } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, role, status')
         .eq('role', 'teacher');
 
-      if (classError) throw classError;
       if (teacherError) throw teacherError;
 
-      setClasses(classData.map(c => ({
-        ...c,
-        teacher_name: (c as any).profiles?.full_name || 'Chưa gán'
-      })));
-      setTeachers(teacherData);
+      const mappedClasses: ClassWithTeacher[] = (classData || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        teacherId: c.teacher_id,
+        isActive: c.is_active,
+        createdAt: new Date(c.created_at).getTime(),
+        teacherName: c.teacher?.full_name || 'Chưa gán'
+      }));
+
+      const mappedTeachers: UserProfile[] = (teacherData || []).map((t: any) => ({
+        id: t.id,
+        fullName: t.full_name,
+        role: t.role,
+        status: t.status || 'active',
+        email: '', 
+        classId: '', 
+        avatarUrl: ''
+      }));
+
+      setClasses(mappedClasses);
+      setTeachers(mappedTeachers);
     } catch (err: any) {
-      onNotify(err.message, 'error');
+      console.error(err);
+      onNotify(err.message || "Lỗi tải dữ liệu lớp học", 'error');
     } finally {
       setLoading(false);
     }
@@ -53,13 +70,17 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
   }, []);
 
   const handleCreateClass = async () => {
-    if (!newClassName) return;
+    if (!newClassName.trim()) return;
     try {
       const { error } = await supabase
         .from('classes')
-        .insert([{ name: newClassName }]);
+        .insert([{ 
+          name: newClassName,
+          is_active: true 
+        }]);
       
       if (error) throw error;
+      
       onNotify("Đã tạo lớp học mới.", "success");
       setNewClassName('');
       setShowModal(false);
@@ -77,7 +98,8 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
         .eq('id', id);
       
       if (error) throw error;
-      fetchData();
+      setClasses(prev => prev.map(c => c.id === id ? { ...c, isActive: !current } : c));
+      onNotify(`Đã ${!current ? 'kích hoạt' : 'tạm dừng'} lớp học.`, "info");
     } catch (err: any) {
       onNotify(err.message, "error");
     }
@@ -87,91 +109,105 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
     try {
       const { error } = await supabase
         .from('classes')
-        .update({ teacher_id: teacherId })
+        .update({ teacher_id: teacherId || null }) 
         .eq('id', classId);
       
       if (error) throw error;
-      onNotify("Đã gán giảng viên cho lớp.", "success");
-      fetchData();
+      
+      onNotify("Đã cập nhật giảng viên phụ trách.", "success");
+      fetchData(); 
     } catch (err: any) {
       onNotify(err.message, "error");
     }
   };
 
   return (
-    <div className="p-10 animate-fade-in">
-      <div className="flex justify-between items-center mb-10">
+    <div className="p-8 animate-fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Quản lý Lớp học</h2>
-          <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">Hệ thống phân phối giảng dạy</p>
+          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+            <i className="fas fa-school text-[#14452F]"></i> Quản lý Lớp học
+          </h2>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 ml-8">Cấu trúc tổ chức đào tạo</p>
         </div>
         <button 
           onClick={() => setShowModal(true)}
-          className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all"
+          className="bg-[#14452F] text-white px-6 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-[#0F3624] transition-all flex items-center gap-2 active:scale-95"
         >
-          <i className="fas fa-plus"></i> Tạo Lớp mới
+          <i className="fas fa-plus"></i> Khởi tạo Lớp
         </button>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-separate border-spacing-y-4">
-          <thead>
-            <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-6">
-              <th className="px-8 py-4">Tên Lớp</th>
-              <th className="px-8 py-4">Giảng viên phụ trách</th>
-              <th className="px-8 py-4">Trạng thái</th>
-              <th className="px-8 py-4 text-right">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {classes.map(c => (
-              <tr key={c.id} className="bg-slate-50 hover:bg-slate-100 transition-all group rounded-2xl">
-                <td className="px-8 py-6 font-black text-slate-800 rounded-l-[2rem]">{c.name}</td>
-                <td className="px-8 py-6">
-                  <select 
-                    value={c.teacher_id || ''} 
+        <div className="min-w-[800px] space-y-3">
+          {/* Header Row */}
+          <div className="flex px-6 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 chamfer-sm border border-slate-100">
+             <div className="w-1/4">Tên Lớp / Mã</div>
+             <div className="w-1/3">Giảng viên phụ trách</div>
+             <div className="w-1/4 text-center">Trạng thái</div>
+             <div className="w-1/6 text-right">Điều khiển</div>
+          </div>
+
+          {/* Data Rows */}
+          {classes.map(c => (
+             <div key={c.id} className="flex items-center px-6 py-4 bg-white border-2 border-slate-100 chamfer-sm hover:border-[#14452F]/30 hover:shadow-md transition-all group">
+                <div className="w-1/4 font-black text-slate-800 text-sm">{c.name}</div>
+                <div className="w-1/3">
+                   <select 
+                    value={c.teacherId || ''} 
                     onChange={(e) => assignTeacher(c.id, e.target.value)}
-                    className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-600 outline-none focus:border-blue-500"
+                    className="bg-slate-50 border border-slate-200 chamfer-sm px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#14452F] w-full max-w-[200px]"
                   >
-                    <option value="">-- Chọn giảng viên --</option>
-                    {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                    <option value="">-- Chưa gán --</option>
+                    {teachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
                   </select>
-                </td>
-                <td className="px-8 py-6">
-                  <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${c.is_active ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                    {c.is_active ? 'Đang hoạt động' : 'Đang tạm dừng'}
+                </div>
+                <div className="w-1/4 text-center">
+                   <span className={`px-3 py-1 chamfer-sm text-[9px] font-black uppercase tracking-widest ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {c.isActive ? 'Active' : 'Paused'}
                   </span>
-                </td>
-                <td className="px-8 py-6 text-right rounded-r-[2rem]">
-                  <button 
-                    onClick={() => toggleClassActive(c.id, c.is_active)}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${c.is_active ? 'bg-red-50 text-red-500 hover:bg-red-500 hover:text-white' : 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white'}`}
+                </div>
+                <div className="w-1/6 text-right">
+                   <button 
+                    onClick={() => toggleClassActive(c.id, c.isActive)}
+                    className={`w-10 h-10 chamfer-sm flex items-center justify-center transition-all ml-auto ${c.isActive ? 'bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-[#14452F] text-white hover:bg-[#0F3624]'}`}
+                    title={c.isActive ? "Tạm dừng" : "Kích hoạt"}
                   >
-                    <i className={`fas ${c.is_active ? 'fa-pause' : 'fa-play'}`}></i>
+                    <i className={`fas ${c.isActive ? 'fa-pause' : 'fa-play'}`}></i>
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+             </div>
+          ))}
+        </div>
+        
+        {!loading && classes.length === 0 && (
+          <div className="text-center py-20 text-slate-300 font-bold uppercase tracking-widest border-2 border-dashed border-slate-200 chamfer-md mt-4">
+            Chưa có lớp học nào
+          </div>
+        )}
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-fade-in-up">
-            <h3 className="text-2xl font-black text-slate-900 mb-8 tracking-tighter">Tạo Lớp học mới</h3>
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tên Lớp (Ví dụ: K65-DIEN01)</label>
-                <input required type="text" value={newClassName} onChange={e => setNewClassName(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500 font-bold" />
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md chamfer-lg p-8 shadow-2xl animate-slide-up border-t-4 border-[#14452F]">
+            <div className="mb-8">
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Tạo Lớp học mới</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Cấu hình đơn vị lớp</p>
+            </div>
+            
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Tên Lớp (Mã hóa)</label>
+                <input required type="text" value={newClassName} onChange={e => setNewClassName(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" autoFocus placeholder="K65-DTVT-01" />
               </div>
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest">Hủy</button>
-                <button onClick={handleCreateClass} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-500/20">Tạo ngay</button>
+              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
+                <button onClick={handleCreateClass} className="flex-1 py-3 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-[#0F3624] transition-all">Khởi tạo</button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

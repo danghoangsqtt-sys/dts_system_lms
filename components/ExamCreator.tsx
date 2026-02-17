@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Question, QuestionType, Exam } from '../types';
 import { formatContent } from '../utils/textFormatter';
 import { supabase } from '../lib/supabase';
@@ -127,8 +128,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
 
   const totalQuestionsRequested = Object.values(matrixCounts).reduce((a, b) => a + b, 0);
 
-  return (
-    <div className="fixed inset-0 z-[5000] bg-slate-50 flex flex-col font-inter animate-fade-in overflow-hidden">
+  // Use Portal to break out of any container clipping or stacking contexts
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] bg-slate-50 flex flex-col font-inter animate-fade-in overflow-hidden">
       <header className="h-20 bg-white border-b border-slate-200 px-10 flex items-center justify-between shrink-0 shadow-sm z-50">
         <div className="flex items-center gap-4">
           <button 
@@ -344,7 +346,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
         )}
       </div>
       <style>{`@media print { body { background: white !important; } header { display: none !important; } aside { display: none !important; } main { padding: 0 !important; margin: 0 !important; } .fixed { position: relative !important; } .overflow-hidden { overflow: visible !important; } .print\\:hidden { display: none !important; } .print\\:p-0 { padding: 0 !important; } }`}</style>
-    </div>
+    </div>,
+    document.body
   );
 };
 

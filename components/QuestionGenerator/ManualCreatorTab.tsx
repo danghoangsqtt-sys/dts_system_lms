@@ -125,11 +125,11 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     <div className="space-y-8 animate-fade-in">
        {/* Folder Selection Dropdown Added at the start of the form */}
        <div className="space-y-2">
-          <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1">Thư mục lưu trữ câu hỏi này</label>
+          <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Thư mục lưu trữ câu hỏi này</label>
           <select 
             value={manualQ.folderId} 
             onChange={e => setManualQ({...manualQ, folderId: e.target.value})} 
-            className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-2xl font-bold text-slate-700 focus:bg-white outline-none transition-all"
+            className="w-full p-4 bg-[#E8F5E9]/50 border border-[#14452F]/20 chamfer-sm font-bold text-slate-700 focus:bg-white outline-none transition-all"
           >
             <option value="default">--- Chọn thư mục lưu (Mặc định) ---</option>
             {folders.filter(f => f.id !== 'default').map(f => (
@@ -146,29 +146,29 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    value={manualQ.content} 
                    onChange={e => setManualQ({...manualQ, content: e.target.value})} 
                    placeholder="Nhập nội dung câu hỏi (sử dụng $...$ cho LaTeX)..." 
-                   className="w-full h-72 p-8 bg-gray-50 border border-gray-200 rounded-[2.5rem] outline-none focus:border-blue-500 font-medium transition-all focus:bg-white focus:shadow-xl custom-scrollbar" 
+                   className="w-full h-72 p-8 bg-gray-50 border border-gray-200 chamfer-lg outline-none focus:border-[#14452F] font-medium transition-all focus:bg-white focus:shadow-xl custom-scrollbar" 
                 />
                 
                 {/* Preview ảnh minh họa nếu có */}
                 {manualQ.image && (
-                    <div className="absolute bottom-24 left-8 right-8 h-32 bg-white/90 backdrop-blur rounded-2xl border border-blue-100 p-2 flex items-center gap-4 shadow-xl group/img animate-fade-in-up">
-                        <div className="h-full aspect-square rounded-xl overflow-hidden border border-gray-100 bg-slate-50 shadow-inner">
+                    <div className="absolute bottom-24 left-8 right-8 h-32 bg-white/90 backdrop-blur chamfer-md border border-[#14452F]/20 p-2 flex items-center gap-4 shadow-xl group/img animate-fade-in-up">
+                        <div className="h-full aspect-square chamfer-sm overflow-hidden border border-gray-100 bg-slate-50 shadow-inner">
                             <img src={manualQ.image} className="w-full h-full object-contain" alt="Preview minh họa" />
                         </div>
                         <div className="flex-1">
-                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-tight">Ảnh đính kèm</p>
+                            <p className="text-[10px] font-black text-[#14452F] uppercase tracking-tight">Ảnh đính kèm</p>
                             <p className="text-[9px] text-gray-400 leading-tight">Ảnh này sẽ hiển thị ngay dưới nội dung câu hỏi.</p>
                         </div>
                         <button 
                             onClick={handleRemoveImage}
-                            className="w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center mr-2 shadow-sm"
+                            className="w-8 h-8 chamfer-sm bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center mr-2 shadow-sm"
                         >
                             <i className="fas fa-trash-alt text-[10px]"></i>
                         </button>
                     </div>
                 )}
 
-                <label className="absolute bottom-6 right-6 w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-lg border border-gray-100 cursor-pointer hover:bg-blue-600 hover:text-white transition-all active:scale-90">
+                <label className="absolute bottom-6 right-6 w-14 h-14 bg-white chamfer-sm flex items-center justify-center text-[#14452F] shadow-lg border border-gray-100 cursor-pointer hover:bg-[#14452F] hover:text-white transition-all active:scale-90">
                    {isLoading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : <i className="fas fa-image text-xl"></i>}
                    <input 
                      type="file" 
@@ -187,23 +187,23 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    <select 
                       value={manualQ.bloomLevel} 
                       onChange={e => setManualQ({...manualQ, bloomLevel: e.target.value})} 
-                      className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl font-bold text-slate-700 focus:bg-white outline-none transition-all"
+                      className="w-full p-4 bg-gray-50 border border-gray-200 chamfer-sm font-bold text-slate-700 focus:bg-white outline-none transition-all"
                    >
                       {BLOOM_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                    </select>
                 </div>
                 <div className="space-y-2">
                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Loại câu hỏi</label>
-                   <div className="flex gap-1 bg-gray-50 p-1 rounded-2xl border border-gray-200">
-                      <button onClick={() => setManualQ({...manualQ, type: QuestionType.MULTIPLE_CHOICE})} className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase transition-all ${manualQ.type === QuestionType.MULTIPLE_CHOICE ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>Trắc nghiệm</button>
-                      <button onClick={() => setManualQ({...manualQ, type: QuestionType.ESSAY})} className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase transition-all ${manualQ.type === QuestionType.ESSAY ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>Tự luận</button>
+                   <div className="flex gap-1 bg-gray-50 p-1 chamfer-sm border border-gray-200">
+                      <button onClick={() => setManualQ({...manualQ, type: QuestionType.MULTIPLE_CHOICE})} className={`flex-1 py-3 chamfer-sm font-black text-[9px] uppercase transition-all ${manualQ.type === QuestionType.MULTIPLE_CHOICE ? 'bg-white text-[#14452F] chamfer-shadow' : 'text-gray-400'}`}>Trắc nghiệm</button>
+                      <button onClick={() => setManualQ({...manualQ, type: QuestionType.ESSAY})} className={`flex-1 py-3 chamfer-sm font-black text-[9px] uppercase transition-all ${manualQ.type === QuestionType.ESSAY ? 'bg-white text-[#14452F] chamfer-shadow' : 'text-gray-400'}`}>Tự luận</button>
                    </div>
                 </div>
              </div>
 
              {manualQ.type === QuestionType.MULTIPLE_CHOICE ? (
-                <div className="grid grid-cols-1 gap-3 bg-blue-50/30 p-6 rounded-[2.5rem] border border-blue-100/50">
-                   <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 mb-1 block">Phương án & Đáp án đúng</label>
+                <div className="grid grid-cols-1 gap-3 bg-[#E8F5E9]/30 p-6 chamfer-lg border border-[#14452F]/10">
+                   <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1 mb-1 block">Phương án & Đáp án đúng</label>
                    <div className="grid grid-cols-1 gap-2">
                       {manualQ.options.map((opt, i) => (
                         <div key={i} className="flex gap-2">
@@ -216,12 +216,12 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                                 setManualQ({...manualQ, options: n}); 
                             }} 
                             placeholder={`Phương án ${String.fromCharCode(65+i)}`} 
-                            className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-sm font-medium shadow-sm transition-all" 
+                            className="flex-1 px-4 py-3 bg-white border border-gray-200 chamfer-sm outline-none focus:border-[#14452F] text-sm font-medium shadow-sm transition-all" 
                           />
                           <button 
                             type="button"
                             onClick={() => setSelectedIndex(i)} 
-                            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${selectedIndex === i ? 'bg-green-600 text-white shadow-lg' : 'bg-white text-gray-300 border border-gray-100 hover:border-blue-300'}`}
+                            className={`w-12 h-12 chamfer-sm flex items-center justify-center transition-all ${selectedIndex === i ? 'bg-green-600 text-white shadow-lg' : 'bg-white text-gray-300 border border-gray-100 hover:border-green-300'}`}
                           >
                             <i className="fas fa-check text-xs"></i>
                           </button>
@@ -230,13 +230,13 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    </div>
                 </div>
              ) : (
-                <div className="space-y-2 bg-purple-50/30 p-6 rounded-[2.5rem] border border-purple-100/50">
+                <div className="space-y-2 bg-purple-50/30 p-6 chamfer-lg border border-purple-100/50">
                    <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1 mb-1 block">Đáp án chuẩn / Gợi ý chấm</label>
                    <textarea 
                       value={manualQ.correctAnswer} 
                       onChange={e => setManualQ({...manualQ, correctAnswer: e.target.value})} 
                       placeholder="Nhập nội dung đáp án chuẩn chi tiết để AI làm căn cứ chấm điểm..." 
-                      className="w-full h-32 p-5 bg-white border border-purple-100 rounded-2xl outline-none focus:border-purple-500 font-medium transition-all shadow-sm" 
+                      className="w-full h-32 p-5 bg-white border border-purple-100 chamfer-md outline-none focus:border-purple-500 font-medium transition-all shadow-sm" 
                    />
                 </div>
              )}
@@ -248,14 +248,14 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                   value={manualQ.explanation} 
                   onChange={e => setManualQ({...manualQ, explanation: e.target.value})} 
                   placeholder="Giải thích lý do chọn đáp án này hoặc nguồn trích dẫn..." 
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-blue-500 text-sm font-medium" 
+                  className="w-full p-4 bg-gray-50 border border-gray-100 chamfer-sm outline-none focus:border-[#14452F] text-sm font-medium" 
                 />
              </div>
 
              <button 
                onClick={handleAddManual} 
                disabled={isLoading}
-               className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+               className="w-full py-5 bg-[#14452F] text-white chamfer-md font-black uppercase text-xs tracking-[0.2em] shadow-2xl hover:bg-[#0F3624] transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
              >
                 <i className="fas fa-plus-circle"></i> THÊM VÀO GIỎ CÂU HỎI
              </button>

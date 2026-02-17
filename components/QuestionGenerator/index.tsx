@@ -10,7 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface QuestionGeneratorProps {
   folders: QuestionFolder[];
-  onSaveQuestions: (questions: Question[]) => void; // Maintained for local cache if needed
+  onSaveQuestions: (questions: Question[]) => void;
   onNotify: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
@@ -73,7 +73,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         const { error } = await supabase.from('questions').insert(payload);
         if (error) throw error;
 
-        onSaveQuestions(pendingQuestions); // Sync local state
+        onSaveQuestions(pendingQuestions);
         setPendingQuestions([]);
         setIsPreviewMode(false);
         onNotify(`Đã lưu ${pendingQuestions.length} câu hỏi mới vào Ngân hàng dữ liệu Cloud.`, "success");
@@ -86,16 +86,17 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
 
   if (!hasApiKey && activeTab === 'AI') {
     return (
-        <div className="h-full flex items-center justify-center p-10 bg-white rounded-[3rem] border border-slate-100 shadow-sm max-w-4xl mx-auto">
+        <div className="h-full flex items-center justify-center p-10 bg-white chamfer-lg border border-slate-100 chamfer-shadow max-w-4xl mx-auto">
+            {/* Warning Content - Kept Same */}
             <div className="text-center space-y-8">
-                <div className="w-24 h-24 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">
+                <div className="w-24 h-24 bg-red-50 text-red-500 chamfer-sm flex items-center justify-center text-4xl mx-auto shadow-inner">
                     <i className="fas fa-key"></i>
                 </div>
                 <div className="space-y-3">
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Thiếu cấu hình AI</h2>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Thiếu cấu hình AI</h2>
                     <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">Để sử dụng tính năng Biên soạn AI, bạn cần nhập Google Gemini API Key của mình vào phần cấu hình hệ thống.</p>
                 </div>
-                <Link to="/settings" className="inline-flex items-center gap-3 px-10 py-4 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all">
+                <Link to="/settings" className="inline-flex items-center gap-3 px-10 py-4 bg-[#14452F] text-white chamfer-md font-black text-[11px] uppercase tracking-widest chamfer-shadow hover:bg-[#0F3624] transition-all">
                     Đi tới Cấu hình ngay <i className="fas fa-arrow-right"></i>
                 </Link>
             </div>
@@ -118,27 +119,48 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   }
 
   return (
-    <div className="bg-white rounded-[3rem] shadow-2xl border border-gray-100 max-w-6xl mx-auto flex flex-col h-[780px] overflow-hidden animate-fade-in-up">
-      <div className="p-10 flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 shrink-0 gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-3">Biên soạn học liệu AI</h2>
-          <p className="text-slate-500 text-sm font-medium italic flex items-center gap-2">
-            <i className="fas fa-wand-magic-sparkles text-blue-500"></i> Trích xuất tri thức từ tài liệu chuyên môn
-          </p>
+    <div className="bg-white chamfer-xl chamfer-shadow border border-slate-100 max-w-7xl mx-auto flex h-[800px] overflow-hidden animate-fade-in-up">
+      
+      {/* NEW LEFT SIDEBAR NAV */}
+      <aside className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 p-6">
+        <div className="mb-8">
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">Studio Soạn thảo</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Trợ lý AI Đa năng</p>
         </div>
-        
-        <div className="flex bg-gray-100/80 p-1.5 rounded-[1.8rem] border border-gray-200">
-          <button onClick={() => setActiveTab('AI')} className={`px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'AI' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Phân tích PDF</button>
-          <button onClick={() => setActiveTab('MANUAL')} className={`px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'MANUAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>Nhập liệu & Ảnh</button>
-        </div>
-      </div>
 
-      <div className="flex-1 p-10 overflow-y-auto custom-scrollbar">
-        {activeTab === 'AI' ? (
-          <AIGeneratorTab folders={folders} selectedFolderId={selectedFolderId} onQuestionsGenerated={handleQuestionsGenerated} onNotify={onNotify} isLoading={isLoading} setIsLoading={setIsLoading} />
-        ) : (
-          <ManualCreatorTab folders={folders} selectedFolderId={selectedFolderId} onQuestionCreated={handleSingleQuestionCreated} onQuestionsGenerated={handleQuestionsGenerated} onNotify={onNotify} isLoading={isLoading} setIsLoading={setIsLoading} />
-        )}
+        <nav className="flex-1 space-y-2">
+            <button 
+                onClick={() => setActiveTab('AI')} 
+                className={`w-full text-left px-5 py-4 chamfer-sm font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'AI' ? 'bg-[#14452F] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}
+            >
+                <i className="fas fa-wand-magic-sparkles"></i> AI Tự động
+            </button>
+            <button 
+                onClick={() => setActiveTab('MANUAL')} 
+                className={`w-full text-left px-5 py-4 chamfer-sm font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'MANUAL' ? 'bg-[#14452F] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}
+            >
+                <i className="fas fa-keyboard"></i> Nhập thủ công
+            </button>
+        </nav>
+
+        <div className="bg-[#E8F5E9] p-4 chamfer-md border border-[#14452F]/10 mt-auto">
+            <p className="text-[9px] font-bold text-[#14452F] uppercase mb-1">Trạng thái</p>
+            <div className="flex items-center gap-2 text-xs font-bold text-[#14452F]">
+                <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></div>
+                {isLoading ? 'Đang xử lý...' : 'Sẵn sàng'}
+            </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 p-10 overflow-y-auto custom-scrollbar">
+            {activeTab === 'AI' ? (
+            <AIGeneratorTab folders={folders} selectedFolderId={selectedFolderId} onQuestionsGenerated={handleQuestionsGenerated} onNotify={onNotify} isLoading={isLoading} setIsLoading={setIsLoading} />
+            ) : (
+            <ManualCreatorTab folders={folders} selectedFolderId={selectedFolderId} onQuestionCreated={handleSingleQuestionCreated} onQuestionsGenerated={handleQuestionsGenerated} onNotify={onNotify} isLoading={isLoading} setIsLoading={setIsLoading} />
+            )}
+        </div>
       </div>
     </div>
   );

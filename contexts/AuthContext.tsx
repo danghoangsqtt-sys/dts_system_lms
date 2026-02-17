@@ -1,13 +1,14 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile, UserRole, UserStatus } from '../types';
 
 interface AuthContextType {
   user: UserProfile | null;
   session: any;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   isAdmin: boolean;
   isTeacher: boolean;
   isStudent: boolean;
@@ -56,24 +57,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
 
       if (data) {
+        // Map snake_case from DB to camelCase for UserProfile interface
         setUser({
           id: userId,
           email: email,
           fullName: data.full_name || 'User',
           role: data.role as UserRole,
           avatarUrl: data.avatar_url,
-          classId: data.class_id
+          classId: data.class_id,
+          status: (data.status as UserStatus) || 'active', // Default to active if missing
+          updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : undefined
         });
       }
     } catch (err) {
       console.error('Error fetching profile:', err);
+      // Fallback: Create a minimal user object if profile fetch fails but auth exists
+      // This prevents the app from crashing in edge cases
+      setUser({
+        id: userId,
+        email: email,
+        fullName: 'Người dùng',
+        role: 'student', // Default fallback role
+        status: 'active',
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const refreshProfile = async () => {
+    if (session?.user) {
+      setLoading(true);
+      await fetchProfile(session.user.id, session.user.email!);
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
   };
 
   const isAdmin = user?.role === 'admin';
@@ -85,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     session,
     loading,
     signOut,
+    refreshProfile,
     isAdmin,
     isTeacher,
     isStudent

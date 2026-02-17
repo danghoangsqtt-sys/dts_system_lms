@@ -6,6 +6,7 @@ import QuestionGenerator from './components/QuestionGenerator/index';
 import Documents from './components/Documents';
 import GameQuiz from './components/GameQuiz';
 import Settings from './components/Settings';
+import ProfileSettings from './components/ProfileSettings';
 import QuestionBankManager from './components/QuestionBankManager';
 import ChangelogModal from './components/ChangelogModal';
 import Login from './components/Login';
@@ -16,6 +17,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Question, VectorChunk, QuestionFolder, Exam } from './types';
 import pkg from './package.json';
 
+// --- Sidebar Link Component (Chamfered) ---
 const SidebarLink = ({ to, icon, label, onClick }: { to: string, icon: string, label: string, onClick?: () => void }) => {
   const location = useLocation();
   const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
@@ -23,78 +25,208 @@ const SidebarLink = ({ to, icon, label, onClick }: { to: string, icon: string, l
     <Link
       to={to}
       onClick={onClick}
-      className={`flex items-center gap-3 px-5 py-4 rounded-2xl transition-all duration-300 font-bold ${
+      className={`group flex items-center gap-4 px-6 py-4 transition-all duration-200 mb-1 mx-3 font-bold text-sm chamfer-sm ${
         active 
-          ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20 translate-x-1' 
-          : 'text-slate-500 hover:bg-slate-100 hover:text-blue-600'
+          ? 'bg-[#14452F] text-white chamfer-shadow' 
+          : 'text-slate-500 hover:bg-[#E8F5E9] hover:text-[#14452F]'
       }`}
     >
-      <i className={`fas ${icon} w-6 text-center text-lg`}></i>
-      <span className="text-[14px]">{label}</span>
+      <i className={`fas ${icon} w-6 text-center text-lg ${active ? 'text-white' : 'text-slate-400 group-hover:text-[#14452F]'} transition-colors`}></i>
+      <span className="tracking-wide font-[Roboto]">{label}</span>
+      {active && <div className="ml-auto w-1.5 h-1.5 bg-white chamfer-sm"></div>}
     </Link>
   );
 };
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="h-full w-full flex items-center justify-center"><div className="loader-spin"></div></div>;
+  if (loading) return <div className="h-full w-full flex items-center justify-center font-[Roboto] text-sm text-[#14452F] font-bold uppercase tracking-widest"><i className="fas fa-circle-notch fa-spin mr-3"></i> Loading System...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
+// --- Dashboard Component (New Bento Grid Style) ---
 const Dashboard = ({ questionsCount, examsCount }: any) => {
     const { user } = useAuth();
-    return (
-        <div className="p-8 space-y-12 animate-fade-in max-w-7xl mx-auto pb-20">
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-100 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                <div className="space-y-4 relative z-10">
-                  <div className="flex items-center gap-3 text-blue-600 font-black text-[11px] uppercase tracking-[0.3em]">
-                    <i className="fas fa-graduation-cap animate-bounce"></i>
-                    Xin chào, {user?.fullName}!
-                  </div>
-                  <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">
-                    LMS Core <br/> <span className="text-blue-600">Learning Center</span>
-                  </h1>
-                  <p className="text-slate-500 text-lg md:text-xl font-medium max-w-xl">
-                    Hệ thống thông minh hỗ trợ học tập môn "Nguồn điện an toàn và môi trường".
-                  </p>
-                </div>
-                <div className="flex flex-col gap-4 relative z-10 w-full md:w-auto">
-                  <Link to="/game" className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 group">
-                    <i className="fas fa-play group-hover:scale-110 transition"></i> ÔN LUYỆN NGAY
-                  </Link>
-                  {user?.role !== 'student' && (
-                    <Link to="/generate" className="bg-blue-50 text-blue-600 px-10 py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center justify-center gap-3">
-                        <i className="fas fa-magic"></i> AI BIÊN SOẠN
-                    </Link>
-                  )}
-                </div>
-            </header>
+    const [currentTime, setCurrentTime] = useState(new Date());
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                <StatCard icon="fa-database" color="blue" label="Hệ thống câu hỏi" value={questionsCount} unit="Câu hỏi" />
-                <StatCard icon="fa-file-invoice" color="indigo" label="Đề thi hiện có" value={examsCount} unit="Đề thi" />
-                <StatCard icon="fa-layer-group" color="orange" label="Chuyên đề học tập" value={JSON.parse(localStorage.getItem('question_folders') || '[]').length} unit="Chủ đề" />
-                <StatCard icon="fa-file-pdf" color="purple" label="Kho giáo trình" value={JSON.parse(localStorage.getItem('elearning_docs') || '[]').length} unit="Tài liệu" />
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const foldersCount = JSON.parse(localStorage.getItem('question_folders') || '[]').length;
+    const docsCount = JSON.parse(localStorage.getItem('elearning_docs') || '[]').length;
+
+    return (
+        <div className="p-6 md:p-10 space-y-8 animate-slide-up max-w-[1920px] mx-auto pb-24 font-[Roboto]">
+            
+            {/* Bento Grid Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* 1. Hero Section (Span 8) */}
+                <div className="lg:col-span-8 bg-white chamfer-xl chamfer-shadow border-l-8 border-[#14452F] p-8 md:p-12 relative overflow-hidden group flex flex-col justify-between min-h-[300px]">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-[#14452F]/5 chamfer-diag -mr-20 -mt-20 group-hover:bg-[#14452F]/10 transition-colors duration-500"></div>
+                    <div className="relative z-10 space-y-6">
+                        <div className="flex items-center gap-3 text-slate-400">
+                            <span className="bg-slate-100 px-3 py-1 chamfer-sm text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                {currentTime.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-widest animate-pulse text-[#14452F]">
+                                • System Online
+                            </span>
+                        </div>
+                        <div>
+                            <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase leading-tight">
+                                Xin chào, <br/> <span className="text-[#14452F]">{user?.fullName}</span>
+                            </h1>
+                            <p className="text-slate-500 text-sm font-medium max-w-xl leading-relaxed mt-4">
+                                Chào mừng trở lại trung tâm điều hành. Hệ thống AI đang ở trạng thái sẵn sàng hỗ trợ công việc giảng dạy và học tập của bạn.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="relative z-10 flex gap-4 mt-8">
+                        <Link to="/game" className="bg-[#14452F] text-white px-8 py-4 chamfer-md font-black text-xs uppercase tracking-widest shadow-xl hover:bg-[#0F3624] transition-all active:scale-95 flex items-center gap-3">
+                            <i className="fas fa-rocket"></i> Vào học ngay
+                        </Link>
+                    </div>
+                </div>
+
+                {/* 2. System Status / Clock (Span 4) */}
+                <div className="lg:col-span-4 bg-[#14452F] text-white chamfer-xl chamfer-shadow p-10 flex flex-col justify-between relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                    <div className="flex justify-between items-start z-10">
+                        <i className="fas fa-microchip text-4xl text-green-400 opacity-80"></i>
+                        <div className="text-right">
+                            <div className="text-5xl font-black tracking-tighter tabular-nums">
+                                {currentTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-green-400 mt-1">Realtime Clock</div>
+                        </div>
+                    </div>
+                    <div className="space-y-4 z-10 mt-8">
+                        <div className="bg-white/10 p-4 chamfer-md border border-white/10 flex justify-between items-center">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">AI Core</span>
+                            <span className="text-xs font-black text-green-400 flex items-center gap-2"><div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div> Active</span>
+                        </div>
+                        <div className="bg-white/10 p-4 chamfer-md border border-white/10 flex justify-between items-center">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">Database</span>
+                            <span className="text-xs font-black text-blue-400">Local Synced</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Quick Stats (Span 12 -> 4 cols) */}
+                <div className="lg:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <StatCard icon="fa-database" label="Ngân hàng câu hỏi" value={questionsCount} unit="Câu" color="blue" />
+                    <StatCard icon="fa-file-signature" label="Đề thi đã tạo" value={examsCount} unit="Đề" color="purple" />
+                    <StatCard icon="fa-folder-tree" label="Chuyên đề" value={foldersCount} unit="Mục" color="orange" />
+                    <StatCard icon="fa-server" label="Tri thức RAG" value={docsCount} unit="Tài liệu" color="teal" />
+                </div>
+
+                {/* 4. Quick Actions (Span 12 - Full Width) */}
+                <div className="lg:col-span-12 space-y-6">
+                    <div className="bg-white p-8 chamfer-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-slate-100 chamfer-sm flex items-center justify-center text-[#14452F]">
+                                <i className="fas fa-bolt"></i>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Truy cập nhanh</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {user?.role !== 'student' ? (
+                                <>
+                                    <Link to="/generate" className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer">
+                                        <i className="fas fa-robot text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
+                                        <h4 className="font-bold text-sm uppercase">AI Soạn thảo</h4>
+                                        <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">Tạo câu hỏi từ PDF</p>
+                                    </Link>
+                                    <Link to="/bank" className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer">
+                                        <i className="fas fa-layer-group text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
+                                        <h4 className="font-bold text-sm uppercase">Ngân hàng đề</h4>
+                                        <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">Quản lý kho dữ liệu</p>
+                                    </Link>
+                                </>
+                            ) : (
+                                <>
+                                    <Link to="/lectures" className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer">
+                                        <i className="fas fa-chalkboard-teacher text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
+                                        <h4 className="font-bold text-sm uppercase">Bài giảng số</h4>
+                                        <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">Xem bài giảng lớp học</p>
+                                    </Link>
+                                    <Link to="/game" className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer">
+                                        <i className="fas fa-gamepad text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
+                                        <h4 className="font-bold text-sm uppercase">Trò chơi</h4>
+                                        <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">Ôn tập tương tác</p>
+                                    </Link>
+                                </>
+                            )}
+                            <Link to="/documents" className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer">
+                                <i className="fas fa-book-open text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
+                                <h4 className="font-bold text-sm uppercase">Tài liệu</h4>
+                                <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">Tra cứu giáo trình</p>
+                            </Link>
+                            <Link to="/settings" className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer">
+                                <i className="fas fa-sliders text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
+                                <h4 className="font-bold text-sm uppercase">Cấu hình</h4>
+                                <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">API Key & Hệ thống</p>
+                            </Link>
+                        </div>
+                    </div>
+                    
+                    {/* Placeholder for Recent Activity */}
+                    <div className="bg-white p-8 chamfer-xl border border-slate-200 shadow-sm min-h-[200px]">
+                         <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-slate-100 chamfer-sm flex items-center justify-center text-[#14452F]">
+                                <i className="fas fa-history"></i>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Hoạt động gần đây</h3>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-4 p-4 border-l-4 border-slate-200 bg-slate-50/50">
+                                <div className="text-[10px] font-bold text-slate-400 min-w-[60px]">{currentTime.toLocaleTimeString()}</div>
+                                <div className="text-sm font-bold text-slate-700">Đăng nhập hệ thống thành công.</div>
+                            </div>
+                            {/* More mock items could go here */}
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     );
 };
 
-const StatCard = ({ icon, color, label, value, unit }: any) => (
-    <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm transition-all hover:shadow-xl group">
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-8 text-xl bg-${color}-50 text-${color}-600 border border-${color}-100/50`}>
-            <i className={`fas ${icon}`}></i>
+// --- Stat Card (Chamfered & Enhanced) ---
+const StatCard = ({ icon, label, value, unit, color }: any) => {
+    const colorClasses: any = {
+        blue: "text-blue-600 bg-blue-50 border-blue-200",
+        purple: "text-purple-600 bg-purple-50 border-purple-200",
+        orange: "text-orange-600 bg-orange-50 border-orange-200",
+        teal: "text-teal-600 bg-teal-50 border-teal-200",
+    };
+    const activeColor = colorClasses[color] || colorClasses.blue;
+
+    return (
+        <div className="bg-white p-6 chamfer-lg chamfer-shadow border border-slate-100 flex flex-col justify-between h-40 hover:-translate-y-1 transition-all duration-300 group relative overflow-hidden">
+            <div className={`absolute top-0 right-0 w-16 h-16 chamfer-sm -mr-6 -mt-6 opacity-20 ${activeColor.split(' ')[1]}`}></div>
+            
+            <div className="flex justify-between items-start relative z-10">
+                <div className={`w-12 h-12 flex items-center justify-center chamfer-sm text-xl ${activeColor}`}>
+                    <i className={`fas ${icon}`}></i>
+                </div>
+            </div>
+            
+            <div className="mt-auto relative z-10">
+                <h3 className="text-4xl font-black text-slate-800 tracking-tight">{value}</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-2">
+                    {label} <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 chamfer-sm">{unit}</span>
+                </p>
+            </div>
         </div>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
-        <div className="flex items-end gap-2 mt-2">
-            <p className="text-4xl font-black text-slate-900 tracking-tighter">{value}</p>
-            <p className="text-xs font-bold text-slate-400 mb-1.5">{unit}</p>
-        </div>
-    </div>
-);
+    );
+}
 
 const AppContent: React.FC = () => {
   const { user, signOut, loading: authLoading } = useAuth();
@@ -105,7 +237,6 @@ const AppContent: React.FC = () => {
   const [notifications, setNotifications] = useState<{ id: number, message: string, type: string }[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // Mobile Sidebar State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -135,10 +266,10 @@ const AppContent: React.FC = () => {
 
   const closeSidebar = () => setIsSidebarOpen(false);
 
-  if (authLoading || !isDataLoaded) return <div className="h-screen w-screen flex items-center justify-center bg-slate-900"><div className="loader-spin"></div></div>;
+  if (authLoading || !isDataLoaded) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-white text-[#14452F] font-[Roboto]"><i className="fas fa-circle-notch fa-spin text-4xl mb-4"></i><span className="text-sm font-black uppercase tracking-widest">Đang khởi động hệ thống...</span></div>;
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden relative">
+    <div className="flex h-screen bg-[#F0F2F5] font-[Roboto] overflow-hidden relative">
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
         
@@ -149,91 +280,88 @@ const AppContent: React.FC = () => {
               {/* Mobile Hamburger Button */}
               <button 
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="lg:hidden fixed top-4 left-4 z-50 w-12 h-12 bg-white rounded-xl shadow-lg flex items-center justify-center text-slate-800 border border-slate-100"
+                className="lg:hidden fixed top-4 left-4 z-50 w-12 h-12 bg-white chamfer-shadow chamfer-sm flex items-center justify-center text-[#14452F] border border-slate-100"
               >
-                <i className={`fas ${isSidebarOpen ? 'fa-times' : 'fa-bars'}`}></i>
+                <i className={`fas ${isSidebarOpen ? 'fa-times' : 'fa-bars'} text-xl`}></i>
               </button>
 
               {/* Mobile Sidebar Overlay */}
               {isSidebarOpen && (
                 <div 
-                  className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm transition-opacity"
+                  className="fixed inset-0 bg-slate-900/60 z-30 lg:hidden backdrop-blur-sm transition-opacity"
                   onClick={closeSidebar}
                 ></div>
               )}
 
               {/* Sidebar */}
               <aside className={`
-                fixed lg:static inset-y-0 left-0 z-40 w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-xl lg:shadow-none transition-transform duration-300 ease-in-out
+                fixed lg:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col shrink-0 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
               `}>
-                <div className="p-10 pb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-[1.8rem] flex items-center justify-center text-2xl shadow-xl shadow-blue-500/30 transform -rotate-3">
-                      <i className="fas fa-graduation-cap"></i>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-2xl font-black tracking-tighter leading-none text-slate-900">LMS Core</span>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">E-SafePower</span>
-                    </div>
+                <div className="p-8 border-b border-slate-100 flex items-center gap-4 bg-white">
+                  <div className="w-12 h-12 bg-[#14452F] chamfer-sm flex items-center justify-center text-white font-bold text-xl chamfer-shadow">
+                    <i className="fas fa-graduation-cap"></i>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-[#14452F] tracking-tight uppercase">ĐTS LMS</h2>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">V3.9 Tech-Edu</p>
                   </div>
                 </div>
 
-                <nav className="flex-1 px-6 py-6 space-y-2 overflow-y-auto custom-scrollbar">
+                <nav className="flex-1 py-6 overflow-y-auto custom-scrollbar space-y-1">
                   {user?.role === 'admin' && (
                     <>
-                      <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mb-4">Hệ thống</div>
-                      <SidebarLink to="/admin" icon="fa-user-shield" label="Quản trị Admin" onClick={closeSidebar} />
+                      <div className="px-8 mb-3 mt-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Quản trị Hệ thống</div>
+                      <SidebarLink to="/admin" icon="fa-shield-halved" label="Admin Panel" onClick={closeSidebar} />
                     </>
                   )}
 
                   {user?.role === 'teacher' && (
                     <>
-                      <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mb-4">Lớp học</div>
+                      <div className="px-8 mb-3 mt-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Khu vực Giảng viên</div>
                       <SidebarLink to="/teacher/students" icon="fa-users-gear" label="Quản lý Học viên" onClick={closeSidebar} />
                     </>
                   )}
 
-                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-6 mb-4">Học tập</div>
-                  <SidebarLink to="/" icon="fa-house" label="Tổng quan" onClick={closeSidebar} />
-                  <SidebarLink to="/lectures" icon="fa-file-video" label="Bài giảng lớp" onClick={closeSidebar} />
-                  <SidebarLink to="/documents" icon="fa-book-open" label="Tài liệu chuyên đề" onClick={closeSidebar} />
+                  <div className="px-8 mb-3 mt-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Không gian Học tập</div>
+                  <SidebarLink to="/" icon="fa-gauge-high" label="Tổng quan" onClick={closeSidebar} />
+                  <SidebarLink to="/lectures" icon="fa-film" label="Bài giảng Số" onClick={closeSidebar} />
+                  <SidebarLink to="/documents" icon="fa-book-open" label="Tài liệu & RAG" onClick={closeSidebar} />
                   
                   {user?.role !== 'student' && (
                     <>
-                      <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-10 mb-4">Biên soạn</div>
-                      <SidebarLink to="/bank" icon="fa-database" label="Ngân hàng đề" onClick={closeSidebar} />
-                      <SidebarLink to="/generate" icon="fa-wand-magic-sparkles" label="AI Biên soạn" onClick={closeSidebar} />
+                      <div className="px-8 mb-3 mt-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Công cụ Biên soạn</div>
+                      <SidebarLink to="/bank" icon="fa-server" label="Ngân hàng Đề" onClick={closeSidebar} />
+                      <SidebarLink to="/generate" icon="fa-robot" label="AI Soạn thảo" onClick={closeSidebar} />
                     </>
                   )}
                   
-                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-10 mb-4">Đánh giá</div>
-                  <SidebarLink to="/game" icon="fa-gamepad-modern" label="Trung tâm Game" onClick={closeSidebar} />
-                  
-                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-10 mb-4">Cài đặt</div>
-                  <SidebarLink to="/settings" icon="fa-gear" label="Cấu hình" onClick={closeSidebar} />
+                  <div className="px-8 mb-3 mt-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tiện ích Mở rộng</div>
+                  <SidebarLink to="/game" icon="fa-gamepad" label="Trò chơi Ôn tập" onClick={closeSidebar} />
+                  <SidebarLink to="/settings" icon="fa-sliders" label="Cấu hình" onClick={closeSidebar} />
                 </nav>
 
-                <div className="p-10 border-t border-slate-50 flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-black">
-                      {user?.fullName.charAt(0)}
+                <div className="p-6 border-t border-slate-100 bg-slate-50">
+                  <Link to="/profile" className="flex items-center gap-4 mb-4 bg-white p-3 chamfer-sm border border-slate-200 hover:border-[#14452F] transition-all cursor-pointer group">
+                    <div className="w-10 h-10 bg-[#E8F5E9] chamfer-sm flex items-center justify-center text-[#14452F] text-sm font-black overflow-hidden group-hover:shadow-md transition-all">
+                      {user?.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : user?.fullName.charAt(0)}
                     </div>
                     <div className="flex flex-col overflow-hidden">
-                      <span className="text-xs font-black text-slate-800 truncate">{user?.fullName}</span>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{user?.role}</span>
+                      <span className="text-sm font-bold text-slate-800 truncate group-hover:text-[#14452F] transition-colors">{user?.fullName}</span>
+                      <span className="text-[9px] text-[#14452F] font-bold uppercase tracking-wider">{user?.role === 'admin' ? 'Quản trị viên' : user?.role === 'teacher' ? 'Giảng viên' : 'Học viên'}</span>
                     </div>
-                  </div>
-                  <button onClick={signOut} className="w-full py-3 rounded-xl bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-500 transition-all border border-slate-100">
-                    <i className="fas fa-right-from-bracket mr-2"></i> Đăng xuất
+                  </Link>
+                  <button onClick={signOut} className="w-full py-3 bg-white border border-slate-200 text-slate-600 chamfer-sm text-[10px] font-black uppercase tracking-widest hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
+                    <i className="fas fa-sign-out-alt"></i> Đăng xuất
                   </button>
                 </div>
               </aside>
 
-              <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50 relative pt-16 lg:pt-0">
-                <div className="flex-1 overflow-auto custom-scrollbar">
+              <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#F0F2F5]">
+                <div className="flex-1 overflow-auto custom-scrollbar p-0">
                   <Routes>
                     <Route path="/" element={<Dashboard questionsCount={questions.length} examsCount={exams.length} />} />
+                    <Route path="/profile" element={<ProfileSettings onNotify={showNotify} />} />
                     <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard onNotify={showNotify}/></ProtectedRoute>} />
                     <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherStudents onNotify={showNotify}/></ProtectedRoute>} />
                     <Route path="/lectures" element={<LectureManager onNotify={showNotify}/>} />
@@ -252,13 +380,27 @@ const AppContent: React.FC = () => {
         } />
       </Routes>
 
-      <div className="fixed top-8 right-8 z-[100] space-y-3 pointer-events-none">
+      {/* Notifications - Chamfered Style */}
+      <div className="fixed top-6 right-6 z-[100] space-y-3 pointer-events-none">
           {notifications.map(n => (
-              <div key={n.id} className={`px-6 py-4 rounded-3xl shadow-2xl border flex items-center gap-4 animate-fade-in-up pointer-events-auto bg-white min-w-[320px] border-${n.type === 'success' ? 'green' : n.type === 'error' ? 'red' : 'blue'}-100`}>
-                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center bg-${n.type === 'success' ? 'green' : n.type === 'error' ? 'red' : 'blue'}-50`}>
-                      <i className={`fas ${n.type === 'success' ? 'fa-check-circle text-green-500' : n.type === 'error' ? 'fa-triangle-exclamation text-red-500' : 'fa-info-circle text-blue-500'}`}></i>
+              <div key={n.id} className={`px-6 py-4 bg-white border-l-4 chamfer-shadow chamfer-md flex items-center gap-4 animate-slide-up pointer-events-auto min-w-[340px] transform hover:scale-105 transition-all ${
+                  n.type === 'success' ? 'border-[#14452F]' : n.type === 'error' ? 'border-red-500' : 'border-blue-500'
+              }`}>
+                  <div className={`w-8 h-8 chamfer-sm flex items-center justify-center shrink-0 ${
+                      n.type === 'success' ? 'bg-[#E8F5E9] text-[#14452F]' : n.type === 'error' ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'
+                  }`}>
+                    <i className={`fas ${
+                        n.type === 'success' ? 'fa-check' : n.type === 'error' ? 'fa-exclamation' : 'fa-info'
+                    } text-sm`}></i>
                   </div>
-                  <span className="text-sm font-bold text-slate-700">{n.message}</span>
+                  <div>
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${
+                        n.type === 'success' ? 'text-[#14452F]' : n.type === 'error' ? 'text-red-500' : 'text-blue-500'
+                    }`}>
+                        {n.type === 'success' ? 'Thành công' : n.type === 'error' ? 'Lỗi hệ thống' : 'Thông báo'}
+                    </p>
+                    <p className="text-xs font-bold text-slate-700 mt-0.5">{n.message}</p>
+                  </div>
               </div>
           ))}
       </div>

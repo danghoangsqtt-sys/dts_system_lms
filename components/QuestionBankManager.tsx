@@ -52,7 +52,6 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const fetchDbExams = async () => {
       setLoading(true);
       try {
-          // Fetch exams created by this teacher
           const { data, error } = await supabase
             .from('exams')
             .select('*')
@@ -100,13 +99,12 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const handleSaveExamToDb = async (exam: Exam) => {
       try {
           const config = exam.config || {};
-          // Insert into Supabase
           const { error } = await supabase.from('exams').insert([{
               title: exam.title,
               type: exam.type,
               question_ids: exam.questionIds,
               config: config,
-              class_id: config.assignedClassId || null, // Use the assigned class from config
+              class_id: config.assignedClassId || null,
               creator_id: user?.id
           }]);
 
@@ -129,128 +127,149 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
     />;
   }
 
+  // --- NEW LAYOUT: Single Column with Top Navigation ---
   return (
-    <div className="h-full flex flex-col md:flex-row bg-white overflow-hidden animate-fade-in font-inter relative">
-      <aside className="w-full md:w-72 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0">
-        <div className="p-6 border-b border-slate-200 bg-white">
-          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 mb-6">
-            <button onClick={() => setManagerTab('QUESTIONS')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${managerTab === 'QUESTIONS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Kho Đề</button>
-            <button onClick={() => setManagerTab('EXAMS')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${managerTab === 'EXAMS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Đề Thi</button>
-          </div>
-          <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                  <i className="fas fa-layer-group text-blue-600"></i>
-                  <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest">Phạm vi dữ liệu</h3>
-              </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-            {managerTab === 'QUESTIONS' && (
-                <>
-                <button onClick={() => setViewScope('MINE')} className={`w-full text-left px-5 py-4 rounded-2xl font-bold text-sm flex items-center gap-3 transition-all ${viewScope === 'MINE' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-200/50'}`}>
-                    <i className="fas fa-user-shield"></i> Câu hỏi của tôi
-                </button>
-                <button onClick={() => setViewScope('PUBLIC')} className={`w-full text-left px-5 py-4 rounded-2xl font-bold text-sm flex items-center gap-3 transition-all ${viewScope === 'PUBLIC' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-200/50'}`}>
-                    <i className="fas fa-globe-asia"></i> Thư viện cộng đồng
-                </button>
-                </>
-            )}
-            <div className="mt-10 p-6 bg-indigo-50 rounded-3xl border border-indigo-100">
-                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-2 leading-none">Chế độ giảng viên</p>
-                <p className="text-[11px] text-indigo-800/70 leading-relaxed font-medium">Bạn có thể chia sẻ câu hỏi của mình để các giảng viên khác cùng sử dụng và đóng góp cho ngân hàng đề thi chung.</p>
+    <div className="h-full flex flex-col bg-[#F0F2F5] font-[Roboto] overflow-hidden">
+      
+      {/* Top Header & Navigation Area */}
+      <header className="bg-white border-b border-slate-200 px-8 py-5 shrink-0 shadow-sm z-10 flex flex-col gap-4">
+        
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            {/* Title & Stats */}
+            <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-[#14452F] text-white chamfer-sm flex items-center justify-center text-xl">
+                    <i className={`fas ${managerTab === 'QUESTIONS' ? 'fa-database' : 'fa-file-signature'}`}></i>
+                </div>
+                <div>
+                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                        {managerTab === 'QUESTIONS' ? 'Ngân hàng câu hỏi' : 'Quản lý Đề thi'}
+                    </h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Tổng số: <span className="text-[#14452F]">{managerTab === 'QUESTIONS' ? displayQuestions.length : dbExams.length}</span> mục dữ liệu
+                    </p>
+                </div>
             </div>
-        </div>
-      </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        <header className="p-8 border-b border-slate-100 bg-white shadow-sm z-10">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div>
-              <nav className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">
-                <i className="fas fa-database"></i>
-                <span>/ Ngân hàng đề / {managerTab === 'QUESTIONS' ? (viewScope === 'MINE' ? 'Kho cá nhân' : 'Thư viện chung') : 'Danh sách đề thi'}</span>
-              </nav>
-              <h2 className="text-3xl font-black text-slate-900 flex items-center gap-4 tracking-tighter">
-                {managerTab === 'QUESTIONS' ? 'Kho quản lý câu hỏi' : 'Quản lý Đề thi'}
-                <span className="text-sm font-bold bg-slate-100 text-slate-500 px-4 py-1.5 rounded-full">
-                  {managerTab === 'QUESTIONS' ? displayQuestions.length : dbExams.length}
-                </span>
-              </h2>
-            </div>
-            <div className="flex flex-wrap gap-3">
-               <div className="relative group">
-                 <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                 <input type="text" placeholder="Tìm kiếm..." value={search} onChange={e => setSearch(e.target.value)} className="pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white transition-all w-64" />
-               </div>
-               {managerTab === 'EXAMS' && (
-                 <button onClick={() => setIsCreatingExam(true)} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition-all">
-                    Tạo đề mới <i className="fas fa-plus ml-1"></i>
-                 </button>
-               )}
-            </div>
-          </div>
-          {managerTab === 'QUESTIONS' && (
-            <div className="flex gap-2 mt-6 overflow-x-auto no-scrollbar pb-1">
-                {['ALL', QuestionType.MULTIPLE_CHOICE, QuestionType.ESSAY].map(type => (
-                <button key={type} onClick={() => setActiveTab(type as any)} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === type ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
-                    {type === 'ALL' ? 'Tất cả' : type === QuestionType.MULTIPLE_CHOICE ? 'Trắc nghiệm' : 'Tự luận'}
+            {/* Top Tabs Switcher */}
+            <div className="flex bg-slate-100 p-1 chamfer-sm border border-slate-200">
+                <button onClick={() => setManagerTab('QUESTIONS')} className={`px-6 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest transition-all ${managerTab === 'QUESTIONS' ? 'bg-[#14452F] text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}>
+                    Kho câu hỏi
                 </button>
-                ))}
+                <button onClick={() => setManagerTab('EXAMS')} className={`px-6 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest transition-all ${managerTab === 'EXAMS' ? 'bg-[#14452F] text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}>
+                    Đề thi
+                </button>
             </div>
-          )}
-        </header>
+        </div>
 
-        <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 custom-scrollbar pb-32">
-          {loading ? (
-              <div className="h-full flex items-center justify-center py-20"><i className="fas fa-circle-notch fa-spin text-4xl text-blue-500"></i></div>
-          ) : managerTab === 'QUESTIONS' ? (
-            <div className="space-y-6 max-w-5xl mx-auto">
-                {displayQuestions.map((q) => (
-                  <div key={q.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden">
-                     <div className={`absolute top-0 left-0 w-2 h-full ${q.type === QuestionType.MULTIPLE_CHOICE ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
-                     <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                           <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${q.type === QuestionType.MULTIPLE_CHOICE ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-                               {q.type === QuestionType.MULTIPLE_CHOICE ? 'Trắc nghiệm' : 'Tự luận'}
-                           </span>
-                           <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-3 py-1 rounded-full uppercase">{q.bloom_level || 'Mặc định'}</span>
-                        </div>
-                        {viewScope === 'MINE' && (
-                            <button onClick={() => togglePublic(q.id, q.is_public_bank)} className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${q.is_public_bank ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
-                                <i className={`fas ${q.is_public_bank ? 'fa-eye-slash' : 'fa-share-nodes'} mr-1`}></i>{q.is_public_bank ? 'Hủy chia sẻ' : 'Chia sẻ công khai'}
+        {/* Filters Bar */}
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between border-t border-slate-100 pt-4">
+            <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 no-scrollbar">
+                {managerTab === 'QUESTIONS' && (
+                    <>
+                        <button onClick={() => setViewScope('MINE')} className={`px-4 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest border transition-all ${viewScope === 'MINE' ? 'bg-[#E8F5E9] text-[#14452F] border-[#14452F]' : 'bg-white text-slate-400 border-slate-200'}`}>
+                            <i className="fas fa-user-lock mr-2"></i> Cá nhân
+                        </button>
+                        <button onClick={() => setViewScope('PUBLIC')} className={`px-4 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest border transition-all ${viewScope === 'PUBLIC' ? 'bg-[#E8F5E9] text-[#14452F] border-[#14452F]' : 'bg-white text-slate-400 border-slate-200'}`}>
+                            <i className="fas fa-globe mr-2"></i> Cộng đồng
+                        </button>
+                        <div className="w-[1px] h-8 bg-slate-200 mx-2"></div>
+                        {['ALL', QuestionType.MULTIPLE_CHOICE, QuestionType.ESSAY].map(type => (
+                            <button key={type} onClick={() => setActiveTab(type as any)} className={`px-4 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === type ? 'text-[#14452F] underline decoration-2 underline-offset-4' : 'text-slate-400 hover:text-slate-600'}`}>
+                                {type === 'ALL' ? 'Tất cả' : type === QuestionType.MULTIPLE_CHOICE ? 'Trắc nghiệm' : 'Tự luận'}
                             </button>
-                        )}
-                     </div>
-                     <div className="font-bold text-slate-800 leading-relaxed text-lg math-content mb-6">
-                        {formatContent(typeof q.content === 'string' ? q.content : q.content.content)}
-                     </div>
-                  </div>
-                ))}
+                        ))}
+                    </>
+                )}
+            </div>
+
+            <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64">
+                    <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                    <input 
+                        type="text" 
+                        placeholder="Tìm kiếm nội dung..." 
+                        value={search} 
+                        onChange={e => setSearch(e.target.value)} 
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 chamfer-sm text-xs font-bold text-slate-700 outline-none focus:border-[#14452F] transition-all" 
+                    />
+                </div>
+                {managerTab === 'EXAMS' && (
+                    <button onClick={() => setIsCreatingExam(true)} className="bg-[#14452F] text-white px-5 py-2.5 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all whitespace-nowrap">
+                        <i className="fas fa-plus mr-2"></i> Tạo đề
+                    </button>
+                )}
+            </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto p-6 bg-slate-100 custom-scrollbar">
+          {loading ? (
+              <div className="h-full flex flex-col items-center justify-center gap-4 text-[#14452F]">
+                  <i className="fas fa-cog fa-spin text-4xl"></i>
+                  <span className="text-xs font-black uppercase tracking-widest">Đang tải dữ liệu...</span>
+              </div>
+          ) : managerTab === 'QUESTIONS' ? (
+            <div className="grid grid-cols-1 gap-4 max-w-5xl mx-auto pb-20">
+                {displayQuestions.length === 0 ? (
+                    <div className="text-center py-20 text-slate-400 font-bold uppercase tracking-widest text-xs border-2 border-dashed border-slate-200 chamfer-md bg-slate-50">
+                        Không tìm thấy dữ liệu phù hợp
+                    </div>
+                ) : (
+                    displayQuestions.map((q) => (
+                        <div key={q.id} className="bg-white p-6 chamfer-md border border-slate-200 hover:border-[#14452F]/30 hover:shadow-lg transition-all group flex gap-5">
+                            <div className={`w-1 shrink-0 ${q.type === QuestionType.MULTIPLE_CHOICE ? 'bg-[#14452F]' : 'bg-purple-500'}`}></div>
+                            <div className="flex-1">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-[8px] font-black px-2 py-0.5 chamfer-sm uppercase ${q.type === QuestionType.MULTIPLE_CHOICE ? 'bg-[#E8F5E9] text-[#14452F]' : 'bg-purple-50 text-purple-600'}`}>
+                                            {q.type === QuestionType.MULTIPLE_CHOICE ? 'TN' : 'TL'}
+                                        </span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{q.bloom_level}</span>
+                                    </div>
+                                    {viewScope === 'MINE' && (
+                                        <button onClick={() => togglePublic(q.id, q.is_public_bank)} className="text-slate-300 hover:text-[#14452F] transition-all" title={q.is_public_bank ? "Hủy chia sẻ" : "Chia sẻ"}>
+                                            <i className={`fas ${q.is_public_bank ? 'fa-globe text-blue-500' : 'fa-lock'}`}></i>
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="text-sm font-medium text-slate-700 leading-relaxed math-content">
+                                    {formatContent(typeof q.content === 'string' ? q.content : q.content.content)}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
           ) : (
-            /* EXAMS LIST VIEW */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            /* EXAM LIST - Grid Layout */
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-7xl mx-auto pb-20">
                 {dbExams.map(exam => (
-                    <div key={exam.id} onClick={() => setViewingExam({ ...exam, questionIds: exam.question_ids })} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer group">
-                        <div className="flex justify-between items-start mb-6">
-                             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                 <i className="fas fa-file-signature"></i>
-                             </div>
-                             <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-50 px-3 py-1 rounded-full">{exam.question_ids?.length || 0} Câu</span>
+                    <div key={exam.id} onClick={() => setViewingExam({ ...exam, questionIds: exam.question_ids })} className="bg-white p-6 chamfer-md border border-slate-200 hover:border-[#14452F] hover:-translate-y-1 transition-all cursor-pointer group flex flex-col h-64 justify-between">
+                        <div>
+                            <div className="flex justify-between mb-4">
+                                <div className="w-10 h-10 bg-[#E8F5E9] chamfer-sm flex items-center justify-center text-[#14452F] font-bold">
+                                    <i className="fas fa-file-alt"></i>
+                                </div>
+                                <span className="text-[9px] font-black bg-slate-100 px-2 py-1 chamfer-sm text-slate-500">{exam.question_ids?.length || 0} Câu</span>
+                            </div>
+                            <h4 className="font-bold text-slate-800 text-sm leading-snug uppercase line-clamp-3 group-hover:text-[#14452F] transition-colors">{exam.title}</h4>
                         </div>
-                        <h4 className="font-black text-slate-800 text-lg leading-snug mb-2">{exam.title}</h4>
-                        <div className="flex flex-col gap-1">
-                           <p className="text-xs text-slate-500 font-medium">Mã đề: {exam.config?.examCode}</p>
-                           {exam.class_id ? <p className="text-[10px] font-black text-green-600 uppercase">Đã giao cho lớp</p> : <p className="text-[10px] font-black text-orange-400 uppercase">Lưu nháp</p>}
+                        <div className="pt-4 border-t border-slate-50">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                                {exam.class_id ? <i className="fas fa-users text-green-500"></i> : <i className="fas fa-pencil-alt text-orange-400"></i>}
+                                {exam.class_id ? 'Đã giao' : 'Bản nháp'}
+                            </p>
                         </div>
                     </div>
                 ))}
                 {dbExams.length === 0 && (
-                    <div className="col-span-full py-32 text-center text-slate-300 font-bold uppercase tracking-widest">Bạn chưa tạo đề thi nào</div>
+                    <div className="col-span-full py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest border-2 border-dashed border-slate-200 bg-white chamfer-md">
+                        Danh sách đề thi trống
+                    </div>
                 )}
             </div>
           )}
-        </div>
       </div>
     </div>
   );

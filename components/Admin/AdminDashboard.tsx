@@ -11,50 +11,77 @@ interface AdminDashboardProps {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify }) => {
   const location = useLocation();
-  const currentTab = location.pathname.split('/').pop() || 'dashboard';
 
   const NavItem = ({ to, label, icon }: { to: string, label: string, icon: string }) => {
     const active = location.pathname.endsWith(to);
     return (
       <Link 
         to={to} 
-        className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all border ${
+        className={`flex items-center gap-3 px-8 py-4 chamfer-sm font-black text-[10px] uppercase tracking-widest transition-all relative overflow-hidden group ${
           active 
-            ? 'bg-blue-600 text-white border-blue-500 shadow-xl shadow-blue-500/20' 
-            : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'
+            ? 'bg-[#14452F] text-white shadow-lg shadow-[#14452F]/20' 
+            : 'bg-white text-slate-500 border-2 border-slate-100 hover:border-[#14452F]/30 hover:text-[#14452F]'
         }`}
       >
-        <i className={`fas ${icon} mr-2`}></i> {label}
+        <i className={`fas ${icon} text-sm ${active ? 'text-green-400' : 'text-slate-400 group-hover:text-[#14452F]'}`}></i>
+        {label}
+        {active && <div className="absolute right-0 top-0 w-2 h-2 bg-green-400"></div>}
       </Link>
     );
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-10 animate-fade-in pb-24">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-        <div className="space-y-2 relative z-10">
-          <div className="flex items-center gap-3 text-blue-600 font-black text-[11px] uppercase tracking-[0.3em]">
-            <i className="fas fa-shield-halved"></i>
-            Hệ thống Quản trị Trung tâm
+    <div className="p-6 max-w-[1600px] mx-auto space-y-6 animate-fade-in pb-24 font-[Roboto]">
+      
+      {/* Command Center Header */}
+      <header className="bg-slate-900 p-8 chamfer-lg border-b-4 border-[#14452F] shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[#14452F]/20 chamfer-diag -mr-16 -mt-16 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-32 h-1 bg-gradient-to-r from-[#14452F] to-transparent"></div>
+        
+        <div className="flex flex-col md:flex-row justify-between items-end gap-6 relative z-10">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 bg-[#14452F] px-3 py-1 chamfer-sm border border-green-500/30">
+              <span className="w-1.5 h-1.5 bg-green-500 animate-pulse"></span>
+              <span className="text-[9px] font-black text-green-400 uppercase tracking-[0.3em]">System Admin</span>
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-tighter uppercase">Trung tâm Quản trị DHsystem</h1>
+            <p className="text-slate-400 text-xs font-medium max-w-xl">
+              Phân quyền truy cập, quản lý nhân sự và cấu hình lớp học toàn hệ thống.
+            </p>
           </div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Admin Control Panel</h1>
-          <p className="text-slate-500 text-sm font-medium">Quản lý nhân sự, lớp học và phê duyệt người dùng toàn hệ thống.</p>
-        </div>
-        <div className="flex gap-3 relative z-10 mt-6 md:mt-0">
-          <NavItem to="teachers" label="Giảng viên" icon="fa-chalkboard-user" />
-          <NavItem to="classes" label="Lớp học" icon="fa-school" />
-          <NavItem to="students" label="Học viên" icon="fa-users" />
+          
+          <div className="flex gap-2">
+             <div className="bg-white/5 p-4 chamfer-sm border border-white/10 text-center">
+                <div className="text-2xl font-black text-white">Active</div>
+                <div className="text-[8px] text-slate-400 uppercase tracking-widest">Trạng thái</div>
+             </div>
+             <div className="bg-white/5 p-4 chamfer-sm border border-white/10 text-center">
+                <div className="text-2xl font-black text-[#14452F]">PRO</div>
+                <div className="text-[8px] text-slate-400 uppercase tracking-widest">Giấy phép</div>
+             </div>
+          </div>
         </div>
       </header>
 
-      <div className="bg-white rounded-[3.5rem] border border-slate-100 shadow-sm overflow-hidden min-h-[600px]">
+      {/* Navigation Bar */}
+      <div className="flex flex-wrap gap-2">
+          <NavItem to="teachers" label="Nhân sự (Giảng viên)" icon="fa-chalkboard-user" />
+          <NavItem to="classes" label="Cấu trúc Lớp học" icon="fa-school" />
+          <NavItem to="students" label="Phê duyệt Học viên" icon="fa-user-check" />
+      </div>
+
+      {/* Content Area */}
+      <div className="bg-white chamfer-lg border border-slate-200 shadow-sm min-h-[600px] relative">
         <Routes>
-          <Route path="/" element={<div className="p-20 text-center space-y-4">
-            <i className="fas fa-chart-pie text-6xl text-slate-200 mb-6"></i>
-            <h2 className="text-2xl font-black text-slate-800">Chào mừng Admin!</h2>
-            <p className="text-slate-500 max-w-md mx-auto">Vui lòng chọn một mục ở thanh menu phía trên để bắt đầu quản lý hệ thống LMS.</p>
-          </div>} />
+          <Route path="/" element={
+            <div className="h-full flex flex-col items-center justify-center p-20 text-center opacity-50">
+                <div className="w-32 h-32 bg-slate-100 chamfer-lg flex items-center justify-center mb-6">
+                    <i className="fas fa-shield-halved text-6xl text-slate-300"></i>
+                </div>
+                <h2 className="text-2xl font-black text-slate-400 uppercase tracking-tight">Chọn chức năng quản trị</h2>
+                <p className="text-xs font-bold text-slate-300 uppercase tracking-widest mt-2">Sử dụng thanh điều hướng phía trên</p>
+            </div>
+          } />
           <Route path="teachers" element={<TeacherManager onNotify={onNotify} />} />
           <Route path="classes" element={<ClassManager onNotify={onNotify} />} />
           <Route path="students" element={<StudentApproval onNotify={onNotify} />} />
