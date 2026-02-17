@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="vi">
   <head>
@@ -96,27 +95,6 @@
         animation: fade-in 0.3s ease-out forwards;
       }
     </style>
-    
-    <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.1/+esm",
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
-    "pdfjs-dist/build/pdf": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs",
-    "pdfjs-dist/build/pdf.worker": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs",
-    "pdfjs-dist/": "https://esm.sh/pdfjs-dist@^5.4.530/",
-    "vite": "https://esm.sh/vite@^7.3.0",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.530",
-    "super-react": "https://esm.sh/super-react@^0.9.1"
-  }
-}
-</script>
 
     <script>
       window.bootLogs = [];
@@ -165,7 +143,22 @@
         setTimeout(() => logBoot("Đang nạp thuật toán RAG & Grounding..."), 1000);
       });
     </script>
-<link rel="stylesheet" href="/index.css">
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.624",
+    "pdfjs-dist/": "https://esm.sh/pdfjs-dist@^5.4.624/",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3"
+  }
+}
+</script>
 </head>
   <body>
     <!-- Splash Loader -->
@@ -206,6 +199,5 @@
 
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-  <script type="module" src="/index.tsx"></script>
-</body>
+  </body>
 </html>

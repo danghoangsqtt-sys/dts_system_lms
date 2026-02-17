@@ -11,24 +11,23 @@
   "author": "DHsystem",
   "license": "ISC",
   "dependencies": {
-    "@google/genai": "^1.30.0",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "*",
     "@supabase/supabase-js": "^2.45.1",
     "katex": "^0.16.9",
-    "pdfjs-dist": "^4.0.379",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.6",
-    "uuid": "^13.0.0"
+    "pdfjs-dist": "^4.3.136",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.1",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "@types/react": "^19.0.8",
-    "@types/react-dom": "^19.0.3",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.5.1",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "postcss": "^8.4.41",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2"
   }
 }
