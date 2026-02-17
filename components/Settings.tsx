@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { AppSettings, AppVersionInfo } from '../types';
 import { checkAppUpdate } from '../services/updateService';
@@ -16,8 +17,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSave: true,
   ragTopK: 5,
   thinkingBudget: 0,
-  systemExpertise: 'ACADEMIC',
-  manualApiKey: ''
+  systemExpertise: 'ACADEMIC'
 };
 
 const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
@@ -31,7 +31,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
     return parsed;
   });
 
-  const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('USER_GEMINI_KEY') || '');
   const [kbSize, setKbSize] = useState(0);
 
   useEffect(() => {
@@ -47,7 +46,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
 
   const saveSettings = () => {
     localStorage.setItem('app_settings', JSON.stringify(settings));
-    localStorage.setItem('USER_GEMINI_KEY', userGeminiKey);
     onNotify("Đã lưu cấu hình hệ thống LMS.", "success");
   };
 
@@ -185,23 +183,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* API Key Section */}
-                <div className="col-span-full bg-slate-50 p-6 chamfer-md border border-slate-200">
-                    <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest block mb-3">
-                        <i className="fas fa-key mr-2"></i> Google Gemini API Key (Bắt buộc)
-                    </label>
-                    <div className="relative">
-                        <input 
-                            type="password"
-                            value={userGeminiKey}
-                            onChange={e => setUserGeminiKey(e.target.value)}
-                            placeholder="sk-..."
-                            className="w-full pl-4 pr-4 py-3 bg-white border-2 border-slate-200 chamfer-sm font-bold text-slate-800 outline-none focus:border-[#14452F] transition-all"
-                        />
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-2 font-medium italic">Key của bạn được lưu cục bộ trên trình duyệt.</p>
-                </div>
-
                 {/* Model Selection */}
                 <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">AI Model</label>

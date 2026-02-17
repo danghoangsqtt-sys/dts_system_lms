@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { generateQuestionsByAI } from '../services/geminiService';
 import { Question, QuestionType, QuestionFolder } from '../types';
@@ -160,9 +161,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     setIsLoading(true);
     try {
       /* Enforce exclusively using process.env.API_KEY per guidelines */
-      const savedSettings = localStorage.getItem('app_settings');
-      const manualApiKey = savedSettings ? JSON.parse(savedSettings).manualApiKey : null;
-      const ai = new GoogleGenAI({ apiKey: manualApiKey || process.env.API_KEY || "" });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
       /* Fix contents format to use correct structure for multi-part turn per guidelines */
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",

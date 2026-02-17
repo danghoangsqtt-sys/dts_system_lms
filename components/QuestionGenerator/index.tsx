@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Question, QuestionFolder } from '../../types';
 import AIGeneratorTab from './AIGeneratorTab';
@@ -23,12 +24,6 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('default');
-  const [hasApiKey, setHasApiKey] = useState(false);
-
-  useEffect(() => {
-    const key = localStorage.getItem('USER_GEMINI_KEY');
-    setHasApiKey(!!key);
-  }, []);
 
   const handleQuestionsGenerated = (questions: Question[]) => {
     setPendingQuestions(questions);
@@ -83,26 +78,6 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         setIsLoading(false);
     }
   };
-
-  if (!hasApiKey && activeTab === 'AI') {
-    return (
-        <div className="h-full flex items-center justify-center p-10 bg-white chamfer-lg border border-slate-100 chamfer-shadow max-w-4xl mx-auto">
-            {/* Warning Content - Kept Same */}
-            <div className="text-center space-y-8">
-                <div className="w-24 h-24 bg-red-50 text-red-500 chamfer-sm flex items-center justify-center text-4xl mx-auto shadow-inner">
-                    <i className="fas fa-key"></i>
-                </div>
-                <div className="space-y-3">
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Thiếu cấu hình AI</h2>
-                    <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">Để sử dụng tính năng Biên soạn AI, bạn cần nhập Google Gemini API Key của mình vào phần cấu hình hệ thống.</p>
-                </div>
-                <Link to="/settings" className="inline-flex items-center gap-3 px-10 py-4 bg-[#14452F] text-white chamfer-md font-black text-[11px] uppercase tracking-widest chamfer-shadow hover:bg-[#0F3624] transition-all">
-                    Đi tới Cấu hình ngay <i className="fas fa-arrow-right"></i>
-                </Link>
-            </div>
-        </div>
-    );
-  }
 
   if (isPreviewMode) {
     return (

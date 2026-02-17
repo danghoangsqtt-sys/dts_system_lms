@@ -1,4 +1,5 @@
 
+
 // Fix: Updated model name to gemini-2.5-flash-native-audio-preview-12-2025 as per guidelines.
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
@@ -125,12 +126,10 @@ const LiveChat: React.FC<LiveChatProps> = ({ voiceName = 'Kore', onClose }) => {
     setIsInitializing(true);
 
     try {
-      /* Lấy API Key từ localStorage */
-      const saved = localStorage.getItem('app_settings');
-      const apiKey = saved ? JSON.parse(saved).manualApiKey : "";
+      const apiKey = process.env.API_KEY;
       
       if (!apiKey) {
-        setError("Vui lòng nhập API Key trong phần Cài đặt để sử dụng tính năng này.");
+        setError("API Key configuration missing in environment variables.");
         setIsInitializing(false);
         return;
       }

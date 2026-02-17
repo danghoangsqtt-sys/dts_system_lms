@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { generateChatResponse } from '../services/geminiService';
 import { ChatMessage, VectorChunk } from '../types';
@@ -20,7 +21,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<'TEXT' | 'LIVE'>('TEXT');
   const [input, setInput] = useState('');
-  const [hasKey, setHasKey] = useState(false);
   
   const getInitialMessage = () => {
       if (user?.role === 'teacher') return `Xin chào Giảng viên ${user.fullName}. Tôi có thể hỗ trợ gì cho giáo án hôm nay?`;
@@ -44,11 +44,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
       }
   }, [user]);
 
-  useEffect(() => {
-    const key = localStorage.getItem('USER_GEMINI_KEY');
-    setHasKey(!!key);
-  }, [isOpen]);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -62,11 +57,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
     
-    if (!hasKey) {
-        onNotify?.("Vui lòng nhập API KEY trong phần Cài đặt.", "warning");
-        return;
-    }
-
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -166,25 +156,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
           </div>
 
           <div className="flex-1 overflow-hidden bg-[#F8FAFC] flex flex-col relative rounded-br-[18px]">
-            {!hasKey ? (
-                <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 text-slate-400">
-                    <div className="w-20 h-20 bg-slate-100 flex items-center justify-center text-4xl text-[#14452F]" style={chamferedStyle}>
-                        <i className="fas fa-key"></i>
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-[#14452F] uppercase tracking-widest mb-2">Yêu cầu cấu hình</h3>
-                        <p className="text-xs max-w-[200px] mx-auto">Vui lòng nhập Google Gemini API Key của bạn trong phần cài đặt để kích hoạt trợ lý.</p>
-                    </div>
-                    <Link 
-                        to="/settings" 
-                        onClick={() => setIsOpen(false)} 
-                        className="px-6 py-3 bg-[#14452F] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#0F3624] transition-all"
-                        style={chamferedStyle}
-                    >
-                        Đi tới Cài đặt
-                    </Link>
-                </div>
-            ) : mode === 'LIVE' ? (
+            {mode === 'LIVE' ? (
                 <div className="h-full">
                     <LiveChat voiceName={aiVoice} onClose={() => setMode('TEXT')} />
                 </div>

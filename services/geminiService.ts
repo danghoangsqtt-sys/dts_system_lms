@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Question, QuestionType, VectorChunk, AppSettings, UserProfile } from "../types";
 import { findRelevantChunks } from "./documentProcessor";
@@ -15,8 +16,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSave: true,
   ragTopK: 5, 
   thinkingBudget: 0, 
-  systemExpertise: 'ACADEMIC',
-  manualApiKey: ''
+  systemExpertise: 'ACADEMIC'
 };
 
 const getSettings = (): AppSettings => {
@@ -25,11 +25,11 @@ const getSettings = (): AppSettings => {
 };
 
 const getAI = () => {
-  const userKey = localStorage.getItem('USER_GEMINI_KEY');
-  const apiKey = userKey || process.env.API_KEY;
+  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+  const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    throw new Error("Vui lòng nhập API Key trong phần Cài đặt để sử dụng AI.");
+    throw new Error("API Key configuration missing. Please ensure process.env.API_KEY is set.");
   }
   
   return new GoogleGenAI({ apiKey });

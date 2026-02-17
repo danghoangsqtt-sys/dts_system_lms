@@ -1,4 +1,5 @@
 
+
 export enum QuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
   ESSAY = 'ESSAY',
@@ -128,7 +129,6 @@ export interface AppSettings {
   thinkingBudget: number; 
   systemExpertise: 'ACADEMIC' | 'FIELD_EXPERT' | 'STUDENT_ASSISTANT';
   debugMode?: boolean;
-  manualApiKey?: string;
 }
 
 export interface AppVersionInfo {
