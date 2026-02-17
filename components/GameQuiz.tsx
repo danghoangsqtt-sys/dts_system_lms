@@ -1,11 +1,10 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Question, QuestionType, QuestionFolder, Exam } from '../types';
 import TimedChallengeGame from './games/TimedChallengeGame';
 import OralGame from './games/OralGame';
 import FlashcardGame from './games/FlashcardGame';
 import MillionaireGame from './games/MillionaireGame';
-import { supabase } from '../lib/supabase';
+import { databases, APPWRITE_CONFIG, Query } from '../lib/appwrite';
 import { useAuth } from '../contexts/AuthContext';
 
 interface GameQuizProps {
@@ -25,6 +24,32 @@ const GameQuiz: React.FC<GameQuizProps> = ({ folders }) => {
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Helper mapping
+  const mapQuestion = (doc: any): Question => ({
+      id: doc.$id,
+      content: typeof doc.content === 'string' ? doc.content : (doc.content?.content || JSON.stringify(doc.content)),
+      type: doc.type,
+      options: doc.options || [],
+      correctAnswer: doc.correct_answer,
+      explanation: doc.explanation,
+      bloomLevel: doc.bloom_level,
+      category: doc.category,
+      folderId: doc.folder_id,
+      image: doc.image,
+      createdAt: new Date(doc.$createdAt).getTime()
+  });
+
+  const mapExam = (doc: any): Exam => ({
+      id: doc.$id,
+      title: doc.title,
+      type: doc.type,
+      questionIds: doc.question_ids || [],
+      config: typeof doc.config === 'string' ? JSON.parse(doc.config) : doc.config,
+      sharedWithClassId: doc.class_id,
+      creatorId: doc.creator_id,
+      createdAt: new Date(doc.$createdAt).getTime()
+  });
+
   // Fetch Exams or General Questions on Load
   useEffect(() => {
     if (!user) return;
@@ -33,14 +58,21 @@ const GameQuiz: React.FC<GameQuizProps> = ({ folders }) => {
         setLoading(true);
         try {
             if (user.role === 'student' && user.classId) {
-                const { data, error } = await supabase.from('exams').select('*').eq('class_id', user.classId);
-                if (error) throw error;
-                setAssignedExams(data || []);
+                const response = await databases.listDocuments(
+                    APPWRITE_CONFIG.dbId,
+                    APPWRITE_CONFIG.collections.exams,
+                    [Query.equal('class_id', user.classId)]
+                );
+                setAssignedExams(response.documents.map(mapExam));
                 setGameState('SELECT_EXAM');
             } else {
-                const { data, error } = await supabase.from('questions').select('*').limit(20);
-                if (error) throw error;
-                setActiveQuestions(data || []);
+                // Load random/latest questions for free play
+                const response = await databases.listDocuments(
+                    APPWRITE_CONFIG.dbId,
+                    APPWRITE_CONFIG.collections.questions,
+                    [Query.limit(20), Query.orderDesc('$createdAt')]
+                );
+                setActiveQuestions(response.documents.map(mapQuestion));
                 setGameState('CONFIG');
             }
         } catch (e) {
@@ -55,11 +87,20 @@ const GameQuiz: React.FC<GameQuizProps> = ({ folders }) => {
 
   const handleSelectExam = async (exam: Exam) => {
     setSelectedExam(exam);
+    if (!exam.questionIds || exam.questionIds.length === 0) {
+        setActiveQuestions([]);
+        setGameState('CONFIG');
+        return;
+    }
+
     setLoading(true);
     try {
-        const { data, error } = await supabase.from('questions').select('*').in('id', exam.questionIds);
-        if (error) throw error;
-        setActiveQuestions(data || []);
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.questions,
+            [Query.equal('$id', exam.questionIds)]
+        );
+        setActiveQuestions(response.documents.map(mapQuestion));
         setGameState('CONFIG');
     } catch (e) {
         alert("Không thể tải nội dung đề thi.");
@@ -70,9 +111,9 @@ const GameQuiz: React.FC<GameQuizProps> = ({ folders }) => {
 
   // Game Engine Router
   if (mode === 'TIMED') return <TimedChallengeGame questions={activeQuestions} onExit={() => setMode('LOBBY')} />;
-  if (mode === 'ORAL') return <OralGame questions={activeQuestions.filter(q => q.type === QuestionType.ESSAY)} onExit={() => setMode('LOBBY')} />;
+  if (mode === 'ORAL') return <OralGame questions={activeQuestions.filter(q => q.type === 'ESSAY')} onExit={() => setMode('LOBBY')} />;
   if (mode === 'FLASHCARD') return <FlashcardGame questions={activeQuestions} onExit={() => setMode('LOBBY')} />;
-  if (mode === 'MILLIONAIRE') return <MillionaireGame questions={activeQuestions.filter(q => q.type === QuestionType.MULTIPLE_CHOICE)} onExit={() => setMode('LOBBY')} />;
+  if (mode === 'MILLIONAIRE') return <MillionaireGame questions={activeQuestions.filter(q => q.type === 'MULTIPLE_CHOICE')} onExit={() => setMode('LOBBY')} />;
 
   return (
     <div className="h-full p-8 bg-[#0F172A] overflow-y-auto custom-scrollbar font-[Roboto] text-white">
@@ -107,7 +148,7 @@ const GameQuiz: React.FC<GameQuizProps> = ({ folders }) => {
                             <div className="relative z-10">
                                 <h4 className="font-black text-white text-lg mb-2">{exam.title}</h4>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest group-hover:text-green-200">
-                                    {exam.questionIds.length} Câu hỏi • Bắt đầu ngay <i className="fas fa-arrow-right ml-1"></i>
+                                    {exam.questionIds?.length || 0} Câu hỏi • Bắt đầu ngay <i className="fas fa-arrow-right ml-1"></i>
                                 </p>
                             </div>
                         </button>

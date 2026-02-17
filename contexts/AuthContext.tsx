@@ -1,12 +1,12 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { account, databases, APPWRITE_CONFIG, ID } from '../lib/appwrite';
 import { UserProfile, UserRole, UserStatus } from '../types';
 
 interface AuthContextType {
   user: UserProfile | null;
-  session: any;
   loading: boolean;
+  login: (email: string, pass: string) => Promise<void>;
+  register: (email: string, pass: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -18,84 +18,104 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        fetchProfile(session.user.id, session.user.email!);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        fetchProfile(session.user.id, session.user.email!);
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    checkSession();
   }, []);
 
-  const fetchProfile = async (userId: string, email: string) => {
+  const checkSession = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        // Map snake_case from DB to camelCase for UserProfile interface
-        setUser({
-          id: userId,
-          email: email,
-          fullName: data.full_name || 'User',
-          role: data.role as UserRole,
-          avatarUrl: data.avatar_url,
-          classId: data.class_id,
-          status: (data.status as UserStatus) || 'active', // Default to active if missing
-          updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : undefined
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-      // Fallback: Create a minimal user object if profile fetch fails but auth exists
-      // This prevents the app from crashing in edge cases
-      setUser({
-        id: userId,
-        email: email,
-        fullName: 'Người dùng',
-        role: 'student', // Default fallback role
-        status: 'active',
-      });
+      // 1. Kiểm tra session hiện tại
+      const sessionUser = await account.get();
+      // 2. Lấy thông tin chi tiết từ collection profiles
+      await fetchProfile(sessionUser.$id, sessionUser.email);
+    } catch (error) {
+      // Không có session
+      setUser(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const refreshProfile = async () => {
-    if (session?.user) {
-      setLoading(true);
-      await fetchProfile(session.user.id, session.user.email!);
+  const fetchProfile = async (userId: string, email: string) => {
+    try {
+      const profile = await databases.getDocument(
+        APPWRITE_CONFIG.dbId,
+        APPWRITE_CONFIG.collections.profiles,
+        userId
+      );
+
+      if (profile) {
+        setUser({
+          id: userId,
+          email: email,
+          fullName: profile.full_name || 'User',
+          role: profile.role as UserRole,
+          // Sử dụng avatar URL từ DB hoặc tạo mới nếu chưa có
+          avatarUrl: profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.full_name || 'User')}&background=random`,
+          classId: profile.class_id,
+          status: (profile.status as UserStatus) || 'active',
+          updatedAt: profile.$updatedAt ? new Date(profile.$updatedAt).getTime() : undefined
+        });
+      }
+    } catch (err) {
+      console.error("Không tìm thấy profile, sử dụng thông tin mặc định...", err);
+      setUser({
+        id: userId,
+        email: email,
+        fullName: 'Người dùng',
+        role: 'student',
+        status: 'active',
+        avatarUrl: `https://ui-avatars.com/api/?name=User&background=random`
+      });
     }
   };
 
+  const login = async (email: string, pass: string) => {
+    await account.createEmailPasswordSession(email, pass);
+    await checkSession();
+  };
+
+  const register = async (email: string, pass: string, name: string) => {
+    // 1. Tạo tài khoản Appwrite Identity
+    const userId = ID.unique();
+    await account.create(userId, email, pass, name);
+    
+    // 2. Đăng nhập ngay lập tức để lấy session
+    await account.createEmailPasswordSession(email, pass);
+
+    // 3. Tạo Document Profile (Quan trọng: ID document trùng với ID User)
+    // Tự động tạo link Avatar dựa trên tên
+    const autoAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+
+    await databases.createDocument(
+        APPWRITE_CONFIG.dbId,
+        APPWRITE_CONFIG.collections.profiles,
+        (await account.get()).$id, // Lấy ID chính xác từ session vừa tạo
+        {
+            full_name: name,
+            role: 'student', // Mặc định là sinh viên
+            status: 'active',
+            email: email,
+            avatar_url: autoAvatarUrl
+        }
+    );
+
+    await checkSession();
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await account.deleteSession('current');
     setUser(null);
-    setSession(null);
+  };
+
+  const refreshProfile = async () => {
+    if (user?.id && user?.email) {
+      setLoading(true);
+      await fetchProfile(user.id, user.email);
+      setLoading(false);
+    }
   };
 
   const isAdmin = user?.role === 'admin';
@@ -104,8 +124,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     user,
-    session,
     loading,
+    login,
+    register,
     signOut,
     refreshProfile,
     isAdmin,

@@ -1,28 +1,46 @@
+import { databases, storage, APPWRITE_CONFIG, ID, Query } from '../lib/appwrite';
+import { Question, Exam, QuestionType } from '../types';
 
-import { supabase } from '../lib/supabase';
-import { Question, Exam, QuestionType, Class, QuestionFolder } from '../types';
+// --- HELPERS ---
 
-// --- MAPPERS (Frontend <-> DB) ---
-
-const mapDbQuestionToLocal = (db: any): Question => ({
-  id: db.id,
-  content: typeof db.content === 'string' ? db.content : (db.content?.content || JSON.stringify(db.content)),
-  type: db.type as QuestionType,
-  options: db.options || [],
-  correctAnswer: db.correct_answer,
-  explanation: db.explanation,
-  bloomLevel: db.bloom_level,
-  category: db.category,
-  folderId: db.folder_id || 'default',
-  image: db.image,
-  creatorId: db.creator_id,
-  isPublicBank: db.is_public_bank,
-  createdAt: db.created_at ? new Date(db.created_at).getTime() : Date.now()
+// Map Appwrite Document ($id, $createdAt) sang Frontend Model (id, createdAt)
+const mapDoc = (doc: any) => ({
+    ...doc,
+    id: doc.$id,
+    createdAt: doc.$createdAt ? new Date(doc.$createdAt).getTime() : Date.now()
 });
 
+const mapDbQuestionToLocal = (db: any): Question => {
+  const mapped = mapDoc(db);
+  // Xử lý content nếu nó là chuỗi JSON hoặc string thường
+  let contentVal = mapped.content;
+  try {
+      if (typeof contentVal === 'string' && (contentVal.startsWith('{') || contentVal.startsWith('['))) {
+          // Nếu là JSON string thì parse, nếu không giữ nguyên
+          const parsed = JSON.parse(contentVal);
+          contentVal = parsed.content || contentVal; 
+      }
+  } catch(e) {}
+
+  return {
+    id: mapped.id,
+    content: contentVal,
+    type: mapped.type as QuestionType,
+    options: mapped.options || [],
+    correctAnswer: mapped.correct_answer,
+    explanation: mapped.explanation,
+    bloomLevel: mapped.bloom_level,
+    category: mapped.category,
+    folderId: mapped.folder_id || 'default',
+    image: mapped.image,
+    creatorId: mapped.creator_id,
+    isPublicBank: mapped.is_public_bank,
+    createdAt: mapped.createdAt
+  };
+};
+
 const mapLocalQuestionToDb = (q: Question, userId: string): any => ({
-  id: q.id, // Preserving ID for migration consistency
-  content: q.content,
+  content: typeof q.content === 'object' ? JSON.stringify(q.content) : q.content,
   type: q.type,
   options: q.options || [],
   correct_answer: q.correctAnswer,
@@ -33,125 +51,162 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => ({
   image: q.image,
   creator_id: userId,
   is_public_bank: !!q.isPublicBank,
-  created_at: new Date(q.createdAt || Date.now()).toISOString()
 });
 
-const mapDbExamToLocal = (db: any): Exam => ({
-  id: db.id,
-  title: db.title,
-  type: db.type,
-  questionIds: db.question_ids || [],
-  config: db.config || {},
-  creatorId: db.creator_id,
-  sharedWithClassId: db.class_id,
-  createdAt: db.created_at ? new Date(db.created_at).getTime() : Date.now()
-});
+const mapDbExamToLocal = (db: any): Exam => {
+  const mapped = mapDoc(db);
+  let configObj = mapped.config;
+  if (typeof configObj === 'string') {
+      try { configObj = JSON.parse(configObj); } catch(e) { configObj = {}; }
+  }
 
-const mapLocalExamToDb = (e: Exam, userId: string): any => ({
-  id: e.id,
-  title: e.title,
-  type: e.type || 'REGULAR',
-  question_ids: e.questionIds || [],
-  config: e.config || {},
-  class_id: e.sharedWithClassId || e.config?.assignedClassId || null,
-  creator_id: userId,
-  created_at: new Date(e.createdAt || Date.now()).toISOString()
-});
+  return {
+    id: mapped.id,
+    title: mapped.title,
+    type: mapped.type,
+    questionIds: mapped.question_ids || [],
+    config: configObj || {},
+    creatorId: mapped.creator_id,
+    sharedWithClassId: mapped.class_id,
+    createdAt: mapped.createdAt
+  };
+};
 
 // --- SERVICE ---
 
 export const databaseService = {
   // --- QUESTIONS ---
   async fetchQuestions(userId?: string) {
-    // Fetch questions created by user OR public questions
-    // Note: RLS policies on Supabase should technically handle the security, 
-    // but we filter here for UI logic if needed.
-    const { data, error } = await supabase
-      .from('questions')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return (data || []).map(mapDbQuestionToLocal);
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.questions,
+            [Query.orderDesc('$createdAt'), Query.limit(100)]
+        );
+        return response.documents.map(mapDbQuestionToLocal);
+    } catch (error) {
+        console.error("Lỗi tải câu hỏi:", error);
+        return [];
+    }
   },
 
   async saveQuestion(q: Question, userId: string) {
     const payload = mapLocalQuestionToDb(q, userId);
-    // Remove ID if it's not a valid UUID to let DB generate one? 
-    // For this app, we assume the DB handles the ID or accepts the string ID if schema allows.
-    // Upserting to handle both create and update.
-    const { data, error } = await supabase
-      .from('questions')
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return mapDbQuestionToLocal(data);
+    try {
+        // Appwrite ID phải <= 36 ký tự và không chứa ký tự đặc biệt. 
+        // Nếu ID local dài hoặc chứa ký tự lạ, ta dùng ID.unique() cho cái mới.
+        if (q.id && q.id.length <= 36 && !q.id.includes('.')) { 
+             try {
+                 const updated = await databases.updateDocument(
+                    APPWRITE_CONFIG.dbId,
+                    APPWRITE_CONFIG.collections.questions,
+                    q.id,
+                    payload
+                 );
+                 return mapDbQuestionToLocal(updated);
+             } catch (e) {
+                 // Nếu update lỗi (do không tồn tại), thử create
+                 const created = await databases.createDocument(
+                    APPWRITE_CONFIG.dbId,
+                    APPWRITE_CONFIG.collections.questions,
+                    q.id,
+                    payload
+                 );
+                 return mapDbQuestionToLocal(created);
+             }
+        } else {
+             const created = await databases.createDocument(
+                APPWRITE_CONFIG.dbId,
+                APPWRITE_CONFIG.collections.questions,
+                ID.unique(),
+                payload
+             );
+             return mapDbQuestionToLocal(created);
+        }
+    } catch (error) {
+        console.error("Lỗi lưu câu hỏi:", error);
+        throw error;
+    }
   },
 
   async bulkInsertQuestions(questions: Question[], userId: string) {
-    if (!questions || questions.length === 0) return;
-    
-    const payloads = questions.map(q => mapLocalQuestionToDb(q, userId));
-    
-    // Process in batches to avoid payload limit
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < payloads.length; i += BATCH_SIZE) {
-      const batch = payloads.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from('questions').upsert(batch, { onConflict: 'id' });
-      if (error) {
-        console.error("Bulk insert questions error:", error);
-        // Continue to next batch even if one fails
-      }
+    for (const q of questions) {
+        await this.saveQuestion(q, userId);
     }
   },
 
   // --- EXAMS ---
   async fetchExams(userId?: string) {
-    // Fetch exams for the user
-    let query = supabase.from('exams').select('*').order('created_at', { ascending: false });
-    if (userId) {
-       // Typically we want exams user created OR exams assigned to user's class (if student)
-       // This logic is complex, usually handled by Supabase Policy or separate queries.
-       // For now, we fetch what RLS allows.
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.exams,
+            [Query.orderDesc('$createdAt')]
+        );
+        return response.documents.map(mapDbExamToLocal);
+    } catch (error) {
+        return [];
     }
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    return (data || []).map(mapDbExamToLocal);
   },
 
   async saveExam(e: Exam, userId: string) {
-    const payload = mapLocalExamToDb(e, userId);
-    const { data, error } = await supabase.from('exams').upsert(payload).select().single();
-    if (error) throw error;
-    return mapDbExamToLocal(data);
+    try {
+        const payload = {
+            title: e.title,
+            type: e.type || 'REGULAR',
+            question_ids: e.questionIds || [],
+            config: JSON.stringify(e.config || {}),
+            class_id: e.sharedWithClassId || e.config?.assignedClassId || null,
+            creator_id: userId,
+        };
+
+        const created = await databases.createDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.exams,
+            ID.unique(),
+            payload
+        );
+        return mapDbExamToLocal(created);
+    } catch (error) {
+        throw error;
+    }
   },
 
   async bulkInsertExams(exams: Exam[], userId: string) {
-    if (!exams || exams.length === 0) return;
-    const payloads = exams.map(e => mapLocalExamToDb(e, userId));
-    const { error } = await supabase.from('exams').upsert(payloads, { onConflict: 'id' });
-    if (error) console.error("Bulk insert exams error:", error);
+    for (const e of exams) {
+        await this.saveExam(e, userId);
+    }
   },
 
-  // --- CLASSES ---
-  async fetchClasses(teacherId?: string) {
-    let query = supabase.from('classes').select('*, teacher:teacher_id(full_name)');
-    if (teacherId) {
-      query = query.eq('teacher_id', teacherId);
-    }
-    const { data, error } = await query;
-    if (error) throw error;
-    
-    return (data || []).map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      teacherId: c.teacher_id,
-      isActive: c.is_active,
-      createdAt: new Date(c.created_at).getTime(),
-      teacherName: c.teacher?.full_name
-    }));
+  // --- LECTURES & FILES ---
+  async uploadLecture(file: File, title: string, classId: string, creatorId: string) {
+      try {
+          // 1. Upload file vào bucket 'lectures'
+          const uploaded = await storage.createFile(
+              APPWRITE_CONFIG.buckets.lectures,
+              ID.unique(),
+              file
+          );
+
+          // 2. Lấy View URL
+          const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, uploaded.$id);
+
+          // 3. Lưu thông tin vào Database
+          const doc = await databases.createDocument(
+              APPWRITE_CONFIG.dbId,
+              APPWRITE_CONFIG.collections.lectures,
+              ID.unique(),
+              {
+                  title: title,
+                  file_url: fileUrl,
+                  creator_id: creatorId,
+                  shared_with_class_id: classId
+              }
+          );
+          return mapDoc(doc);
+      } catch (error) {
+          console.error("Lỗi upload bài giảng:", error);
+          throw error;
+      }
   }
 };

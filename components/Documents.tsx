@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { DocumentFile, VectorChunk } from '../types';
 import { extractDataFromPDF, chunkText, embedChunks } from '../services/documentProcessor';
-import { supabase } from '../lib/supabase';
+import { databases, APPWRITE_CONFIG, Query } from '../lib/appwrite';
 import { useAuth } from '../contexts/AuthContext';
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
@@ -97,17 +96,29 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
 
   useEffect(() => { localStorage.setItem('elearning_docs', JSON.stringify(docs)); }, [docs]);
 
-  // Fetch Cloud Docs
+  // Fetch Cloud Docs via Appwrite
   useEffect(() => {
     if (user?.role === 'student' && user.classId) {
       const fetchLectures = async () => {
-        const { data } = await supabase.from('lectures').select('*').eq('shared_with_class_id', user.classId);
-        if (data) {
-          setCloudDocs(data.map(l => ({
-            id: `cloud_${l.id}`, name: l.title, type: 'PDF', url: l.file_url,
-            uploadDate: new Date(l.created_at).toLocaleDateString('vi-VN'),
-            isProcessed: true, metadata: { title: l.title }
-          })));
+        try {
+            const response = await databases.listDocuments(
+                APPWRITE_CONFIG.dbId,
+                APPWRITE_CONFIG.collections.lectures,
+                [Query.equal('shared_with_class_id', user.classId)]
+            );
+            if (response.documents) {
+                setCloudDocs(response.documents.map((l: any) => ({
+                    id: `cloud_${l.$id}`, 
+                    name: l.title, 
+                    type: 'PDF', 
+                    url: l.file_url,
+                    uploadDate: new Date(l.$createdAt).toLocaleDateString('vi-VN'),
+                    isProcessed: true, 
+                    metadata: { title: l.title }
+                })));
+            }
+        } catch (error) {
+            console.error("Failed to fetch lectures:", error);
         }
       };
       fetchLectures();
@@ -164,7 +175,7 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
     <div className="h-full flex flex-col p-6 gap-6 bg-slate-50 font-[Roboto]">
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-6">
         
-        {/* LEFT: Viewer (70%) - SWAPPED POSITION */}
+        {/* LEFT: Viewer (70%) */}
         <div className="flex-1 flex flex-col min-h-[500px]">
             {selectedDoc ? (
                 <PdfViewer url={selectedDoc.url} isFullScreen={isFullScreen} onToggleFullScreen={() => setIsFullScreen(!isFullScreen)} />
@@ -176,7 +187,7 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
             )}
         </div>
 
-        {/* RIGHT: Document List (30%) - SWAPPED POSITION */}
+        {/* RIGHT: Document List (30%) */}
         <div className="w-full lg:w-96 flex flex-col gap-6">
             
             {/* Header Area for List */}

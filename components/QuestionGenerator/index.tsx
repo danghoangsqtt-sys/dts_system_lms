@@ -1,12 +1,10 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Question, QuestionFolder } from '../../types';
 import AIGeneratorTab from './AIGeneratorTab';
 import ManualCreatorTab from './ManualCreatorTab';
 import ReviewList from './ReviewList';
 import { Link } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { databases, APPWRITE_CONFIG, ID } from '../../lib/appwrite';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface QuestionGeneratorProps {
@@ -51,22 +49,26 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     if (!user) return;
     setIsLoading(true);
     try {
-        const payload = pendingQuestions.map(q => ({
-            content: q.content,
-            type: q.type,
-            options: q.options,
-            correct_answer: q.correctAnswer,
-            explanation: q.explanation,
-            bloom_level: q.bloomLevel,
-            category: q.category,
-            folder_id: q.folderId === 'default' ? null : q.folderId,
-            creator_id: user.id,
-            image: q.image,
-            is_public_bank: false
-        }));
-
-        const { error } = await supabase.from('questions').insert(payload);
-        if (error) throw error;
+        for (const q of pendingQuestions) {
+            await databases.createDocument(
+                APPWRITE_CONFIG.dbId,
+                APPWRITE_CONFIG.collections.questions,
+                ID.unique(),
+                {
+                    content: q.content,
+                    type: q.type,
+                    options: q.options,
+                    correct_answer: q.correctAnswer,
+                    explanation: q.explanation,
+                    bloom_level: q.bloomLevel,
+                    category: q.category,
+                    folder_id: q.folderId === 'default' ? null : q.folderId,
+                    creator_id: user.id,
+                    image: q.image,
+                    is_public_bank: false
+                }
+            );
+        }
 
         onSaveQuestions(pendingQuestions);
         setPendingQuestions([]);
@@ -95,8 +97,6 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
 
   return (
     <div className="bg-white chamfer-xl chamfer-shadow border border-slate-100 max-w-7xl mx-auto flex h-[800px] overflow-hidden animate-fade-in-up">
-      
-      {/* NEW LEFT SIDEBAR NAV */}
       <aside className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 p-6">
         <div className="mb-8">
             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">Studio Soạn thảo</h2>
@@ -104,18 +104,8 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         </div>
 
         <nav className="flex-1 space-y-2">
-            <button 
-                onClick={() => setActiveTab('AI')} 
-                className={`w-full text-left px-5 py-4 chamfer-sm font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'AI' ? 'bg-[#14452F] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}
-            >
-                <i className="fas fa-wand-magic-sparkles"></i> AI Tự động
-            </button>
-            <button 
-                onClick={() => setActiveTab('MANUAL')} 
-                className={`w-full text-left px-5 py-4 chamfer-sm font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'MANUAL' ? 'bg-[#14452F] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}
-            >
-                <i className="fas fa-keyboard"></i> Nhập thủ công
-            </button>
+            <button onClick={() => setActiveTab('AI')} className={`w-full text-left px-5 py-4 chamfer-sm font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'AI' ? 'bg-[#14452F] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><i className="fas fa-wand-magic-sparkles"></i> AI Tự động</button>
+            <button onClick={() => setActiveTab('MANUAL')} className={`w-full text-left px-5 py-4 chamfer-sm font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'MANUAL' ? 'bg-[#14452F] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}><i className="fas fa-keyboard"></i> Nhập thủ công</button>
         </nav>
 
         <div className="bg-[#E8F5E9] p-4 chamfer-md border border-[#14452F]/10 mt-auto">
@@ -127,7 +117,6 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex-1 p-10 overflow-y-auto custom-scrollbar">
             {activeTab === 'AI' ? (

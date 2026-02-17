@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Question, QuestionType, Exam } from '../types';
 import { formatContent } from '../utils/textFormatter';
-import { supabase } from '../lib/supabase';
+import { databases, APPWRITE_CONFIG, Query } from '../lib/appwrite';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ExamConfig {
@@ -40,12 +39,20 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
 
   const [classes, setClasses] = useState<any[]>([]);
 
-  // Fetch classes for assignment
+  // Fetch classes for assignment using Appwrite
   useEffect(() => {
     if (user?.role === 'teacher' || user?.role === 'admin') {
         const fetchClasses = async () => {
-            const { data } = await supabase.from('classes').select('*').eq('teacher_id', user.id);
-            setClasses(data || []);
+            try {
+                const response = await databases.listDocuments(
+                    APPWRITE_CONFIG.dbId,
+                    APPWRITE_CONFIG.collections.classes,
+                    [Query.equal('teacher_id', user.id)]
+                );
+                setClasses(response.documents.map((d: any) => ({ id: d.$id, name: d.name })));
+            } catch (err) {
+                console.error("Error fetching classes:", err);
+            }
         };
         fetchClasses();
     }
@@ -121,7 +128,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
       type: 'REGULAR',
       questionIds: currentQuestionIds,
       createdAt: Date.now(),
-      config: examConfig
+      config: examConfig,
+      sharedWithClassId: examConfig.assignedClassId
     };
     onSaveExam(newExam);
   };

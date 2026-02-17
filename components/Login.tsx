@@ -1,8 +1,8 @@
-
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 const Login: React.FC = () => {
+  const { login, register } = useAuth();
   const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,59 +17,22 @@ const Login: React.FC = () => {
     setError(null);
     setSuccessMsg(null);
 
-    // Validation cơ bản
-    if (password.length < 6) {
-        setError("Mật khẩu phải có ít nhất 6 ký tự.");
+    if (password.length < 8) {
+        setError("Mật khẩu phải có ít nhất 8 ký tự (Yêu cầu Appwrite).");
         setLoading(false);
         return;
     }
 
     try {
       if (mode === 'LOGIN') {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+        await login(email, password);
       } else {
-        // SIGN UP LOGIC
-        if (!fullName.trim()) {
-            throw new Error("Vui lòng nhập họ và tên hiển thị.");
-        }
-
-        const { error, data } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              role: 'student', // Mặc định là student, chờ Admin nâng cấp
-              status: 'active' // Hoặc 'pending' tùy logic business
-            }
-          }
-        });
-
-        if (error) throw error;
-
-        // Nếu Auto-confirm tắt, Supabase sẽ không đăng nhập ngay.
-        if (data.user && !data.session) {
-            setSuccessMsg("Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.");
-            setMode('LOGIN');
-        } else {
-            // Nếu Auto-confirm bật, user sẽ được đăng nhập ngay
-            // Tuy nhiên, để an toàn và đúng luồng, ta vẫn thông báo.
-            setSuccessMsg("Tài khoản đã được tạo. Vui lòng liên hệ Admin để được cấp quyền Giảng viên.");
-        }
+        if (!fullName.trim()) throw new Error("Vui lòng nhập họ và tên.");
+        await register(email, password, fullName);
+        setSuccessMsg("Tài khoản đã được tạo và đăng nhập thành công.");
       }
     } catch (err: any) {
-      // Xử lý các lỗi phổ biến của Supabase
-      if (err.message.includes('User already registered')) {
-          setError('Email này đã được sử dụng. Vui lòng đăng nhập.');
-      } else if (err.message.includes('rate limit')) {
-          setError('Thao tác quá nhanh. Vui lòng đợi 60 giây rồi thử lại.');
-      } else {
-          setError(err.message || 'Đã xảy ra lỗi hệ thống.');
-      }
+      setError(err.message || 'Lỗi xác thực.');
     } finally {
       setLoading(false);
     }
@@ -97,7 +60,6 @@ const Login: React.FC = () => {
         
         <div className="relative bg-[#0F172A]/80 backdrop-blur-2xl border border-white/5 p-8 md:p-10 rounded-2xl shadow-2xl">
           
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="relative inline-flex items-center justify-center w-20 h-20 mb-4">
                <div className="absolute inset-0 bg-[#14452F] opacity-20 animate-spin-slow" style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }}></div>
@@ -111,7 +73,6 @@ const Login: React.FC = () => {
             </p>
           </div>
 
-          {/* Messages */}
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border-l-2 border-red-500 text-red-400 text-xs font-bold flex items-start gap-3 animate-shake rounded-r-lg">
               <i className="fas fa-bug mt-0.5"></i>
@@ -126,7 +87,6 @@ const Login: React.FC = () => {
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleAuth} className="space-y-5">
             {mode === 'SIGNUP' && (
                 <div className="space-y-1 animate-slide-up">
@@ -161,7 +121,7 @@ const Login: React.FC = () => {
                   className="w-full pl-11 pr-4 py-3 bg-[#020617]/60 border border-slate-700 rounded-lg text-white text-sm font-bold outline-none focus:border-emerald-500 transition-all placeholder:text-slate-600"
                 />
               </div>
-              {mode === 'SIGNUP' && <p className="text-[9px] text-slate-500 italic pl-1">* Tối thiểu 6 ký tự</p>}
+              {mode === 'SIGNUP' && <p className="text-[9px] text-slate-500 italic pl-1">* Tối thiểu 8 ký tự</p>}
             </div>
 
             <button 
@@ -173,7 +133,6 @@ const Login: React.FC = () => {
             </button>
           </form>
 
-          {/* Switcher & Guide */}
           <div className="mt-8 pt-6 border-t border-white/5 text-center space-y-4">
             <p className="text-slate-400 text-xs font-medium">
                 {mode === 'LOGIN' ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
@@ -184,15 +143,6 @@ const Login: React.FC = () => {
                     {mode === 'LOGIN' ? 'Đăng ký ngay' : 'Đăng nhập'}
                 </button>
             </p>
-            
-            {mode === 'SIGNUP' && (
-                <div className="bg-emerald-900/20 border border-emerald-500/20 p-3 rounded-lg">
-                    <p className="text-[10px] text-emerald-200/80 leading-relaxed text-left">
-                        <i className="fas fa-info-circle mr-1"></i> 
-                        <strong>Lưu ý cho Giáo viên:</strong> Sau khi đăng ký thành công, tài khoản sẽ ở quyền <em>Học viên</em>. Vui lòng liên hệ Admin để được nâng cấp quyền.
-                    </p>
-                </div>
-            )}
           </div>
         </div>
       </div>
