@@ -1,4 +1,5 @@
 
+
 export enum QuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
   ESSAY = 'ESSAY',
@@ -45,6 +46,7 @@ export interface Exam {
   questionIds: string[]; 
   createdAt: number;
   config: any; 
+  classId?: string; 
 }
 
 export interface PdfMetadata {
