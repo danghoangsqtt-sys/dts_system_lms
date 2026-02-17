@@ -1,15 +1,13 @@
 
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DocumentFile, VectorChunk } from '../types';
 import { extractDataFromPDF, chunkText, embedChunks } from '../services/documentProcessor';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
-
-const isElectron = navigator.userAgent.toLowerCase().includes(' electron/');
-const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
 
 interface DocumentsProps {
   onUpdateKnowledgeBase: (chunks: VectorChunk[]) => void;
@@ -22,22 +20,20 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
     const [pdf, setPdf] = useState<any>(null);
     const [pageNum, setPageNum] = useState(1);
     const [total, setTotal] = useState(0);
-    const [scale, setScale] = useState(1.2); // Tăng tỷ lệ mặc định cho rõ nét
+    const [scale, setScale] = useState(1.2); 
     const [loading, setLoading] = useState(true);
 
-    // Tải tài liệu PDF
     useEffect(() => {
         setLoading(true);
         const loadingTask = pdfjsLib.getDocument(url);
         loadingTask.promise.then((pdfDoc: any) => {
             setPdf(pdfDoc);
             setTotal(pdfDoc.numPages);
-            setPageNum(1); // Luôn bắt đầu từ trang 1 khi mở tệp mới
+            setPageNum(1); 
             setLoading(false);
         }).catch(() => setLoading(false));
     }, [url]);
 
-    // Vẽ trang PDF lên màn hình
     useEffect(() => {
         if (!pdf || !canvasRef.current) return;
         
@@ -58,8 +54,7 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
     }, [pdf, pageNum, scale]);
 
     return (
-        <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden relative group">
-            {/* Thanh công cụ (Toolbar) chuyên nghiệp */}
+        <div className={`flex-1 flex flex-col bg-slate-900 overflow-hidden relative group ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}>
             <div className="bg-slate-800/90 backdrop-blur-md p-3 border-b border-slate-700 flex items-center justify-between z-10 shadow-lg">
                 <div className="flex items-center gap-4">
                     <div className="flex bg-slate-700 rounded-lg p-1 shadow-inner">
@@ -96,7 +91,6 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
                 </div>
             </div>
 
-            {/* Vùng hiển thị tài liệu */}
             <div className="flex-1 overflow-auto p-8 flex justify-center custom-scrollbar bg-slate-900">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center text-blue-400 gap-4">
@@ -109,22 +103,17 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
                     </div>
                 )}
             </div>
-
-            {/* Chỉ báo cuộn hoặc phím tắt */}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="bg-blue-600/90 text-[10px] font-black text-white px-4 py-2 rounded-full backdrop-blur-md shadow-2xl border border-blue-400/30">
-                    SỬ DỤNG PHÍM MŨI TÊN ĐỂ CHUYỂN TRANG
-                </div>
-            </div>
         </div>
     );
 };
 
 const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDocumentData, onNotify }) => {
+  const { user } = useAuth();
   const [docs, setDocs] = useState<DocumentFile[]>(() => {
       const saved = localStorage.getItem('elearning_docs');
       return saved ? JSON.parse(saved) : [];
   });
+  const [cloudDocs, setCloudDocs] = useState<DocumentFile[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocumentFile | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -132,6 +121,34 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
   const [isFullScreen, setIsFullScreen] = useState(false);
 
   useEffect(() => { localStorage.setItem('elearning_docs', JSON.stringify(docs)); }, [docs]);
+
+  // Fetch Lectures from Supabase for Students
+  useEffect(() => {
+    if (user?.role === 'student' && user.classId) {
+      const fetchLectures = async () => {
+        const { data, error } = await supabase
+          .from('lectures')
+          .select('*')
+          .eq('shared_with_class_id', user.classId);
+        
+        if (!error && data) {
+          const mappedDocs: DocumentFile[] = data.map(l => ({
+            id: `cloud_${l.id}`,
+            name: l.title,
+            type: 'PDF',
+            url: l.file_url,
+            uploadDate: new Date(l.created_at).toLocaleDateString('vi-VN'),
+            isProcessed: true, // Assume cloud lectures are ready to view
+            metadata: { title: l.title }
+          }));
+          setCloudDocs(mappedDocs);
+        }
+      };
+      fetchLectures();
+    }
+  }, [user]);
+
+  const allDocs = [...cloudDocs, ...docs];
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -170,6 +187,7 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
   };
 
   const deleteDoc = (doc: DocumentFile) => {
+      if (doc.id.startsWith('cloud_')) return; // Cannot delete cloud docs here
       if (!window.confirm(`Xóa tài liệu "${doc.name}"?`)) return;
       setDocs(prev => prev.filter(d => d.id !== doc.id));
       onDeleteDocumentData(doc.id);
@@ -178,7 +196,7 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
 
   return (
     <div className="h-full flex flex-col p-8 bg-gray-50/30">
-      <div className="flex justify-between items-center mb-8 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm gap-4">
          <div>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Thư viện Tri thức RAG</h2>
             <p className="text-sm text-gray-500 font-medium italic">Tài liệu PDF được AI phân tích và lưu trữ vector</p>
@@ -190,31 +208,36 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
          </label>
       </div>
 
-      <div className="flex-1 flex gap-8 min-h-0">
-        <div className="w-80 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden shrink-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
+        <div className="w-full lg:w-80 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden shrink-0 max-h-[300px] lg:max-h-full">
             <div className="p-6 border-b border-slate-50 bg-gray-50/50 flex justify-between items-center">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giáo trình ({docs.length})</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giáo trình ({allDocs.length})</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {docs.map(doc => (
-                    <div key={doc.id} onClick={() => setSelectedDoc(doc)} className={`p-4 rounded-[1.5rem] border-2 cursor-pointer transition-all relative group ${selectedDoc?.id === doc.id ? 'bg-blue-50 border-blue-500/20' : 'bg-white border-transparent'}`}>
-                        <button onClick={(e) => {e.stopPropagation(); deleteDoc(doc)}} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"><i className="fas fa-trash-alt text-[10px]"></i></button>
-                        <div className="flex gap-4">
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${doc.isProcessed ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-500'}`}>
-                                <i className={`fas ${doc.id === processingDocId ? 'fa-circle-notch fa-spin' : 'fa-file-pdf'} text-lg`}></i>
-                            </div>
-                            <div className="overflow-hidden">
-                                <p className={`font-black text-sm truncate`}>{doc.name}</p>
-                                <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${doc.isProcessed ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                    {doc.isProcessed ? 'Đã học' : doc.id === processingDocId ? `Học ${progress}%` : 'Đang chờ'}
-                                </span>
+                {allDocs.map(doc => {
+                    const isCloud = doc.id.startsWith('cloud_');
+                    return (
+                        <div key={doc.id} onClick={() => setSelectedDoc(doc)} className={`p-4 rounded-[1.5rem] border-2 cursor-pointer transition-all relative group ${selectedDoc?.id === doc.id ? 'bg-blue-50 border-blue-500/20' : 'bg-white border-transparent'}`}>
+                            {!isCloud && (
+                                <button onClick={(e) => {e.stopPropagation(); deleteDoc(doc)}} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"><i className="fas fa-trash-alt text-[10px]"></i></button>
+                            )}
+                            <div className="flex gap-4">
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isCloud ? 'bg-indigo-100 text-indigo-600' : (doc.isProcessed ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-500')}`}>
+                                    <i className={`fas ${doc.id === processingDocId ? 'fa-circle-notch fa-spin' : isCloud ? 'fa-cloud' : 'fa-file-pdf'} text-lg`}></i>
+                                </div>
+                                <div className="overflow-hidden">
+                                    <p className={`font-black text-sm truncate`}>{doc.name}</p>
+                                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${isCloud ? 'bg-indigo-600 text-white' : (doc.isProcessed ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400')}`}>
+                                        {isCloud ? 'Bài giảng lớp' : (doc.isProcessed ? 'Đã học' : doc.id === processingDocId ? `Học ${progress}%` : 'Đang chờ')}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
-        <div className="flex-1 bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden flex flex-col relative">
+        <div className="flex-1 bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden flex flex-col relative min-h-[400px]">
             {selectedDoc ? <PdfViewer url={selectedDoc.url} isFullScreen={isFullScreen} onToggleFullScreen={() => setIsFullScreen(!isFullScreen)} /> : <div className="flex-1 flex items-center justify-center text-gray-500">Chọn tài liệu để xem</div>}
         </div>
       </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import Chatbot from './components/Chatbot';
 import QuestionGenerator from './components/QuestionGenerator/index'; 
 import Documents from './components/Documents';
@@ -16,12 +16,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Question, VectorChunk, QuestionFolder, Exam } from './types';
 import pkg from './package.json';
 
-const SidebarLink = ({ to, icon, label }: { to: string, icon: string, label: string }) => {
+const SidebarLink = ({ to, icon, label, onClick }: { to: string, icon: string, label: string, onClick?: () => void }) => {
   const location = useLocation();
   const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
   return (
     <Link
       to={to}
+      onClick={onClick}
       className={`flex items-center gap-3 px-5 py-4 rounded-2xl transition-all duration-300 font-bold ${
         active 
           ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20 translate-x-1' 
@@ -53,14 +54,14 @@ const Dashboard = ({ questionsCount, examsCount }: any) => {
                     <i className="fas fa-graduation-cap animate-bounce"></i>
                     Xin chào, {user?.fullName}!
                   </div>
-                  <h1 className="text-6xl font-black text-slate-900 tracking-tighter leading-none">
+                  <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">
                     LMS Core <br/> <span className="text-blue-600">Learning Center</span>
                   </h1>
-                  <p className="text-slate-500 text-xl font-medium max-w-xl">
+                  <p className="text-slate-500 text-lg md:text-xl font-medium max-w-xl">
                     Hệ thống thông minh hỗ trợ học tập môn "Nguồn điện an toàn và môi trường".
                   </p>
                 </div>
-                <div className="flex flex-col gap-4 relative z-10">
+                <div className="flex flex-col gap-4 relative z-10 w-full md:w-auto">
                   <Link to="/game" className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 group">
                     <i className="fas fa-play group-hover:scale-110 transition"></i> ÔN LUYỆN NGAY
                   </Link>
@@ -103,6 +104,9 @@ const AppContent: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [notifications, setNotifications] = useState<{ id: number, message: string, type: string }[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  
+  // Mobile Sidebar State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const initData = async () => {
@@ -129,6 +133,8 @@ const AppContent: React.FC = () => {
     setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
   };
 
+  const closeSidebar = () => setIsSidebarOpen(false);
+
   if (authLoading || !isDataLoaded) return <div className="h-screen w-screen flex items-center justify-center bg-slate-900"><div className="loader-spin"></div></div>;
 
   return (
@@ -138,8 +144,29 @@ const AppContent: React.FC = () => {
         
         <Route path="*" element={
           <ProtectedRoute>
-            <div className="flex h-screen w-full overflow-hidden">
-              <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 z-20 shadow-sm overflow-hidden">
+            <div className="flex h-screen w-full overflow-hidden relative">
+              
+              {/* Mobile Hamburger Button */}
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="lg:hidden fixed top-4 left-4 z-50 w-12 h-12 bg-white rounded-xl shadow-lg flex items-center justify-center text-slate-800 border border-slate-100"
+              >
+                <i className={`fas ${isSidebarOpen ? 'fa-times' : 'fa-bars'}`}></i>
+              </button>
+
+              {/* Mobile Sidebar Overlay */}
+              {isSidebarOpen && (
+                <div 
+                  className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm transition-opacity"
+                  onClick={closeSidebar}
+                ></div>
+              )}
+
+              {/* Sidebar */}
+              <aside className={`
+                fixed lg:static inset-y-0 left-0 z-40 w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-xl lg:shadow-none transition-transform duration-300 ease-in-out
+                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+              `}>
                 <div className="p-10 pb-6">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-[1.8rem] flex items-center justify-center text-2xl shadow-xl shadow-blue-500/30 transform -rotate-3">
@@ -156,35 +183,35 @@ const AppContent: React.FC = () => {
                   {user?.role === 'admin' && (
                     <>
                       <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mb-4">Hệ thống</div>
-                      <SidebarLink to="/admin" icon="fa-user-shield" label="Quản trị Admin" />
+                      <SidebarLink to="/admin" icon="fa-user-shield" label="Quản trị Admin" onClick={closeSidebar} />
                     </>
                   )}
 
                   {user?.role === 'teacher' && (
                     <>
                       <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mb-4">Lớp học</div>
-                      <SidebarLink to="/teacher/students" icon="fa-users-gear" label="Quản lý Học viên" />
+                      <SidebarLink to="/teacher/students" icon="fa-users-gear" label="Quản lý Học viên" onClick={closeSidebar} />
                     </>
                   )}
 
                   <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-6 mb-4">Học tập</div>
-                  <SidebarLink to="/" icon="fa-house" label="Tổng quan" />
-                  <SidebarLink to="/lectures" icon="fa-file-video" label="Bài giảng lớp" />
-                  <SidebarLink to="/documents" icon="fa-book-open" label="Tài liệu chuyên đề" />
+                  <SidebarLink to="/" icon="fa-house" label="Tổng quan" onClick={closeSidebar} />
+                  <SidebarLink to="/lectures" icon="fa-file-video" label="Bài giảng lớp" onClick={closeSidebar} />
+                  <SidebarLink to="/documents" icon="fa-book-open" label="Tài liệu chuyên đề" onClick={closeSidebar} />
                   
                   {user?.role !== 'student' && (
                     <>
                       <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-10 mb-4">Biên soạn</div>
-                      <SidebarLink to="/bank" icon="fa-database" label="Ngân hàng đề" />
-                      <SidebarLink to="/generate" icon="fa-wand-magic-sparkles" label="AI Biên soạn" />
+                      <SidebarLink to="/bank" icon="fa-database" label="Ngân hàng đề" onClick={closeSidebar} />
+                      <SidebarLink to="/generate" icon="fa-wand-magic-sparkles" label="AI Biên soạn" onClick={closeSidebar} />
                     </>
                   )}
                   
                   <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-10 mb-4">Đánh giá</div>
-                  <SidebarLink to="/game" icon="fa-gamepad-modern" label="Trung tâm Game" />
+                  <SidebarLink to="/game" icon="fa-gamepad-modern" label="Trung tâm Game" onClick={closeSidebar} />
                   
                   <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] px-4 mt-10 mb-4">Cài đặt</div>
-                  <SidebarLink to="/settings" icon="fa-gear" label="Cấu hình" />
+                  <SidebarLink to="/settings" icon="fa-gear" label="Cấu hình" onClick={closeSidebar} />
                 </nav>
 
                 <div className="p-10 border-t border-slate-50 flex flex-col gap-4">
@@ -203,7 +230,7 @@ const AppContent: React.FC = () => {
                 </div>
               </aside>
 
-              <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50 relative">
+              <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50 relative pt-16 lg:pt-0">
                 <div className="flex-1 overflow-auto custom-scrollbar">
                   <Routes>
                     <Route path="/" element={<Dashboard questionsCount={questions.length} examsCount={exams.length} />} />

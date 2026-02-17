@@ -29,22 +29,26 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
     const fetchData = async () => {
         try {
             if (isTeacher) {
+                // Fetch classes managed by the teacher
                 const { data: classData } = await supabase.from('classes').select('*').eq('teacher_id', user?.id);
                 setClasses(classData || []);
 
+                // Fetch lectures created by the teacher
                 const { data: lectureData, error } = await supabase
                     .from('lectures')
                     .select('*, classes(name)')
-                    .eq('creator_id', user?.id);
+                    .eq('creator_id', user?.id)
+                    .order('created_at', { ascending: false });
                 
                 if (error) throw error;
                 setLectures(lectureData as any);
             } else if (user?.classId) {
-                // Học viên chỉ thấy bài giảng của lớp mình
+                // Students see lectures shared with their class
                 const { data: lectureData, error } = await supabase
                     .from('lectures')
                     .select('*, classes(name)')
-                    .eq('shared_with_class_id', user.classId);
+                    .eq('shared_with_class_id', user.classId)
+                    .order('created_at', { ascending: false });
                 
                 if (error) throw error;
                 setLectures(lectureData as any);
@@ -55,7 +59,7 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
     };
 
     useEffect(() => {
-        fetchData();
+        if (user) fetchData();
     }, [user]);
 
     const handleUpload = async (e: React.FormEvent) => {
@@ -65,19 +69,22 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
         setIsUploading(true);
         try {
             const fileExt = formData.file.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
-            const filePath = `lectures/${fileName}`;
+            const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+            const filePath = `${fileName}`;
 
+            // Upload to Supabase Storage 'lectures' bucket
             const { error: uploadError } = await supabase.storage
-                .from('elearning')
+                .from('lectures')
                 .upload(filePath, formData.file);
 
             if (uploadError) throw uploadError;
 
+            // Get Public URL
             const { data: { publicUrl } } = supabase.storage
-                .from('elearning')
+                .from('lectures')
                 .getPublicUrl(filePath);
 
+            // Insert record into DB
             const { error: dbError } = await supabase
                 .from('lectures')
                 .insert([{
@@ -91,19 +98,33 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
 
             onNotify("Đã tải bài giảng lên thành công!", "success");
             setShowUploadModal(false);
+            setFormData({ title: '', classId: '', file: null });
             fetchData();
         } catch (err: any) {
-            onNotify(err.message, "error");
+            console.error(err);
+            onNotify(err.message || "Lỗi tải lên", "error");
         } finally {
             setIsUploading(false);
         }
     };
 
-    const deleteLecture = async (id: string, url: string) => {
+    const deleteLecture = async (id: string, fileUrl: string) => {
         if (!window.confirm("Xóa bài giảng này?")) return;
         try {
+            // Delete record
             const { error } = await supabase.from('lectures').delete().eq('id', id);
             if (error) throw error;
+
+            // Optional: Delete file from storage if needed. 
+            // Extract path from URL roughly
+            try {
+                const urlObj = new URL(fileUrl);
+                const pathParts = urlObj.pathname.split('/lectures/');
+                if (pathParts.length > 1) {
+                    await supabase.storage.from('lectures').remove([pathParts[1]]);
+                }
+            } catch (e) { console.warn("Could not delete file from storage", e); }
+
             onNotify("Đã xóa bài giảng.", "info");
             fetchData();
         } catch (err: any) {
@@ -151,7 +172,7 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
                                     <span className="text-[9px] font-black text-indigo-500 uppercase bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">Lớp: {l.classes?.name}</span>
                                 </div>
                             </div>
-                            <a href={l.file_url} target="_blank" className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all">
+                            <a href={l.file_url} target="_blank" rel="noopener noreferrer" className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all">
                                 <i className="fas fa-eye"></i> Xem bài giảng
                             </a>
                         </div>

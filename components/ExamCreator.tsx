@@ -1,26 +1,29 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Question, QuestionType, Exam } from '../types';
 import { formatContent } from '../utils/textFormatter';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ExamConfig {
-  organizationName: string; // Tên cơ quan/Bộ chủ quản
-  schoolName: string;       // Tên trường/Đơn vị
+  organizationName: string; 
+  schoolName: string;       
   school: string;
   department: string;
-  subject: string;          // Tên Môn học
-  moduleTerm: string;       // Tên Học phần / Chuyên đề
+  subject: string;          
+  moduleTerm: string;       
   examName: string;
   examCode: string;
   time: string;
   semester: string;
   year: string;
   organizer: string;
+  assignedClassId?: string; // Add field for class assignment
 }
 
 interface ExamCreatorProps {
-  questions: Question[]; // Toàn bộ ngân hàng câu hỏi
-  viewExam?: Exam; // Nếu truyền vào, component sẽ ở chế độ xem lại đề đã lưu
+  questions: Question[]; 
+  viewExam?: Exam; 
   onBack: () => void;
   onSaveExam?: (exam: Exam) => void;
 }
@@ -28,10 +31,24 @@ interface ExamCreatorProps {
 const BLOOM_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
 
 const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, onSaveExam }) => {
+  const { user } = useAuth();
   const [step, setStep] = useState<'MATRIX' | 'PREVIEW'>(viewExam ? 'PREVIEW' : 'MATRIX');
   const [matrixCounts, setMatrixCounts] = useState<Record<string, number>>({
     'Nhận biết': 0, 'Thông hiểu': 0, 'Vận dụng': 0, 'Phân tích': 0, 'Đánh giá': 0, 'Sáng tạo': 0
   });
+
+  const [classes, setClasses] = useState<any[]>([]);
+
+  // Fetch classes for assignment
+  useEffect(() => {
+    if (user?.role === 'teacher' || user?.role === 'admin') {
+        const fetchClasses = async () => {
+            const { data } = await supabase.from('classes').select('*').eq('teacher_id', user.id);
+            setClasses(data || []);
+        };
+        fetchClasses();
+    }
+  }, [user]);
 
   const [examConfig, setExamConfig] = useState<ExamConfig>(viewExam?.config || {
     organizationName: 'BỘ GIÁO DỤC VÀ ĐÀO TẠO',
@@ -45,17 +62,16 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
     time: '60',
     semester: 'Học kỳ II',
     year: '2025 - 2026',
-    organizer: 'BỘ GIÁO DỤC VÀ ĐÀO TẠO'
+    organizer: 'BỘ GIÁO DỤC VÀ ĐÀO TẠO',
+    assignedClassId: ''
   });
 
   const [currentQuestionIds, setCurrentQuestionIds] = useState<string[]>(viewExam?.questionIds || []);
 
-  // Các câu hỏi thực tế đang được chọn cho đề thi
   const selectedQuestions = useMemo(() => {
     return currentQuestionIds.map(id => questions.find(q => q.id === id)).filter(Boolean) as Question[];
   }, [currentQuestionIds, questions]);
 
-  // Thuật toán Trộn
   const shuffle = <T,>(array: T[]): T[] => {
     const newArr = [...array];
     for (let i = newArr.length - 1; i > 0; i--) {
@@ -92,7 +108,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
       return;
     }
 
-    setCurrentQuestionIds(shuffle(newSelectedIds)); // Trộn thứ tự các câu trong đề
+    setCurrentQuestionIds(shuffle(newSelectedIds)); 
     setStep('PREVIEW');
   };
 
@@ -113,7 +129,6 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
 
   return (
     <div className="fixed inset-0 z-[5000] bg-slate-50 flex flex-col font-inter animate-fade-in overflow-hidden">
-      {/* Top Bar Navigation */}
       <header className="h-20 bg-white border-b border-slate-200 px-10 flex items-center justify-between shrink-0 shadow-sm z-50">
         <div className="flex items-center gap-4">
           <button 
@@ -170,9 +185,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
         </div>
       </header>
 
-      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-10 print:p-0 print:overflow-visible bg-slate-50 print:bg-white">
-        
         {step === 'MATRIX' ? (
           <div className="max-w-4xl mx-auto space-y-10 animate-fade-in-up">
             <div className="bg-white p-12 rounded-[3.5rem] border border-slate-100 shadow-sm space-y-10">
@@ -181,52 +194,30 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên cơ quan/Bộ chủ quản</label>
-                            <input 
-                              type="text" 
-                              value={examConfig.organizationName} 
-                              onChange={e => setExamConfig({...examConfig, organizationName: e.target.value})} 
-                              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" 
-                              placeholder="Ví dụ: BỘ GIÁO DỤC VÀ ĐÀO TẠO"
-                            />
+                            <input type="text" value={examConfig.organizationName} onChange={e => setExamConfig({...examConfig, organizationName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ví dụ: BỘ GIÁO DỤC VÀ ĐÀO TẠO"/>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên trường/Đơn vị</label>
-                            <input 
-                              type="text" 
-                              value={examConfig.schoolName} 
-                              onChange={e => setExamConfig({...examConfig, schoolName: e.target.value})} 
-                              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" 
-                              placeholder="Ví dụ: TRƯỜNG ĐẠI HỌC KINH TẾ"
-                            />
+                            <input type="text" value={examConfig.schoolName} onChange={e => setExamConfig({...examConfig, schoolName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ví dụ: TRƯỜNG ĐẠI HỌC KINH TẾ"/>
                         </div>
                     </div>
                     
                     <div className="p-8 bg-purple-50/50 rounded-[2.5rem] border border-purple-100 space-y-6">
+                         {/* Class Assignment Section */}
                         <div className="flex items-center gap-3">
-                            <i className="fas fa-graduation-cap text-purple-600"></i>
-                            <h4 className="text-[11px] font-black text-purple-600 uppercase tracking-[0.2em]">Thông tin học thuật</h4>
+                            <i className="fas fa-users text-purple-600"></i>
+                            <h4 className="text-[11px] font-black text-purple-600 uppercase tracking-[0.2em]">Giao đề thi cho lớp</h4>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên Môn học</label>
-                                <input 
-                                  type="text" 
-                                  value={examConfig.subject} 
-                                  onChange={e => setExamConfig({...examConfig, subject: e.target.value})} 
-                                  className="w-full p-4 bg-white border border-purple-100 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-purple-500" 
-                                  placeholder="Ví dụ: NGUỒN ĐIỆN AN TOÀN VÀ MÔI TRƯỜNG"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên Học phần / Chuyên đề</label>
-                                <input 
-                                  type="text" 
-                                  value={examConfig.moduleTerm} 
-                                  onChange={e => setExamConfig({...examConfig, moduleTerm: e.target.value})} 
-                                  className="w-full p-4 bg-white border border-purple-100 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-purple-500" 
-                                  placeholder="Ví dụ: Lý thuyết cơ sở"
-                                />
-                            </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn lớp học áp dụng</label>
+                            <select 
+                                value={examConfig.assignedClassId || ''} 
+                                onChange={e => setExamConfig({...examConfig, assignedClassId: e.target.value})} 
+                                className="w-full p-4 bg-white border border-purple-100 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-purple-500 text-purple-700"
+                            >
+                                <option value="">-- Không giao (Chỉ lưu nháp) --</option>
+                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
                         </div>
                     </div>
 
@@ -276,28 +267,14 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
                         })}
                     </div>
                 </div>
-
-                <div className="p-8 bg-blue-50 rounded-[2.5rem] border border-blue-100 flex items-center gap-6">
-                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-500 shadow-sm shrink-0">
-                        <i className="fas fa-lightbulb text-xl"></i>
-                    </div>
-                    <p className="text-sm text-blue-800 font-medium leading-relaxed">
-                        Hệ thống sẽ tự động quét ngân hàng câu hỏi hiện tại và lấy ngẫu nhiên các câu hỏi khớp với yêu cầu ma trận. 
-                        Công thức LaTeX và hình ảnh sẽ được giữ nguyên trong bản in.
-                    </p>
-                </div>
             </div>
           </div>
         ) : (
-          /* PREVIEW STEP: A4 Layout */
           <div 
             style={{ fontFamily: '"Times New Roman", Times, serif' }}
             className="max-w-[210mm] min-h-[297mm] mx-auto bg-white p-[20mm] text-black shadow-[0_20px_80px_rgba(0,0,0,0.1)] print:shadow-none print:m-0 print:p-[15mm] mb-20 animate-fade-in-up"
           >
-             
-             {/* Header Section - Standard Vietnamese Administrative Format */}
              <div className="flex justify-between items-start mb-6 w-full">
-                {/* Left Column: Organization & Candidate Info */}
                 <div className="text-center w-[40%] flex flex-col">
                    <h4 className="text-[11px] uppercase leading-tight">{examConfig.organizationName}</h4>
                    <h4 className="text-[12px] font-bold uppercase leading-tight mt-1">{examConfig.schoolName}</h4>
@@ -309,7 +286,6 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
                    </div>
                 </div>
 
-                {/* Right Column: National Emblem Title */}
                 <div className="text-center w-[50%] flex flex-col">
                    <h4 className="text-[11px] font-bold uppercase leading-tight tracking-tight">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</h4>
                    <h4 className="text-[12px] font-bold leading-tight mt-1">Độc lập - Tự do - Hạnh phúc</h4>
@@ -317,7 +293,6 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
                 </div>
              </div>
 
-             {/* Exam Title Section - Centered */}
              <div className="text-center mb-8 w-full border-t border-black/5 pt-4">
                 <h2 className="text-[18px] font-bold uppercase leading-tight mb-1">{examConfig.examName}</h2>
                 <h3 className="text-[14px] font-bold uppercase leading-tight">
@@ -365,52 +340,10 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
              </div>
 
              <div className="text-center mt-16 mb-16 italic text-[14px] font-bold tracking-[0.5em]">--- HẾT ---</div>
-
-             {/* ANSWER SHEET (Giấu khi in nếu không cần, hoặc in kèm) */}
-             <div className="print:break-before-page pt-20 border-t-8 border-double border-slate-100 print:border-none">
-                <h2 className="text-center text-[18px] font-bold uppercase mb-4">ĐÁP ÁN & HƯỚNG DẪN CHẤM</h2>
-                <div className="grid grid-cols-10 border border-black mb-10">
-                   {selectedQuestions.map((q, i) => {
-                        const ansIdx = q.type === QuestionType.MULTIPLE_CHOICE && q.options 
-                            ? q.options.indexOf(q.correctAnswer)
-                            : -1;
-                        return (
-                            <div key={i} className="border border-black p-2 text-center text-[10px]">
-                                <div className="font-bold border-b border-gray-200 mb-1">{i+1}</div>
-                                <div className="font-black text-blue-800">
-                                    {ansIdx >= 0 ? String.fromCharCode(65 + ansIdx) : 'TL'}
-                                </div>
-                            </div>
-                        )
-                   })}
-                </div>
-                <div className="space-y-6">
-                    {selectedQuestions.map((q, i) => (
-                        <div key={i} className="text-[12px] bg-slate-50 p-4 rounded-lg border border-slate-100 print:bg-white print:border-black/10">
-                            <p className="font-bold mb-1">Câu {i+1} ({q.bloomLevel}):</p>
-                            <div className="text-gray-700 italic">
-                                {formatContent(q.type === QuestionType.ESSAY ? q.correctAnswer : q.explanation || "Không có giải thích chi tiết.")}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-             </div>
           </div>
         )}
       </div>
-
-      <style>{`
-        @media print {
-            body { background: white !important; }
-            header { display: none !important; }
-            aside { display: none !important; }
-            main { padding: 0 !important; margin: 0 !important; }
-            .fixed { position: relative !important; }
-            .overflow-hidden { overflow: visible !important; }
-            .print\\:hidden { display: none !important; }
-            .print\\:p-0 { padding: 0 !important; }
-        }
-      `}</style>
+      <style>{`@media print { body { background: white !important; } header { display: none !important; } aside { display: none !important; } main { padding: 0 !important; margin: 0 !important; } .fixed { position: relative !important; } .overflow-hidden { overflow: visible !important; } .print\\:hidden { display: none !important; } .print\\:p-0 { padding: 0 !important; } }`}</style>
     </div>
   );
 };
