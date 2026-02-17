@@ -28,6 +28,25 @@ const OralGame: React.FC<OralGameProps> = ({ questions, onExit }) => {
     error: speechError 
   } = useSpeechRecognition('vi-VN');
 
+  // SAFE GUARD: Nếu không có câu hỏi
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="h-full bg-slate-950 flex flex-col items-center justify-center text-white p-8 text-center space-y-6 font-inter">
+        <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center animate-pulse">
+            <i className="fas fa-search text-4xl text-slate-400"></i>
+        </div>
+        <div>
+            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Chưa có dữ liệu</h3>
+            <p className="text-slate-400 mt-2 text-sm font-medium">Trò chơi này yêu cầu câu hỏi Tự luận (Essay).</p>
+            <p className="text-slate-500 text-xs mt-1">Vui lòng kiểm tra lại Ngân hàng đề thi.</p>
+        </div>
+        <button onClick={onExit} className="px-8 py-3 bg-blue-600 text-white font-black uppercase tracking-widest rounded-xl hover:bg-blue-500 transition-all shadow-lg">
+            Quay lại
+        </button>
+      </div>
+    );
+  }
+
   const handleEvaluate = async () => {
     const finalAnswer = transcript.trim();
     if (!finalAnswer) return;
