@@ -15,6 +15,7 @@ import TeacherStudents from './components/Teacher/TeacherStudents';
 import LectureManager from './components/Teacher/LectureManager';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Question, VectorChunk, QuestionFolder, Exam } from './types';
+import { databaseService } from './services/databaseService';
 import pkg from './package.json';
 
 // --- Sidebar Link Component (Chamfered) ---
@@ -112,7 +113,7 @@ const Dashboard = ({ questionsCount, examsCount }: any) => {
                         </div>
                         <div className="bg-white/10 p-4 chamfer-md border border-white/10 flex justify-between items-center">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">Database</span>
-                            <span className="text-xs font-black text-blue-400">Local Synced</span>
+                            <span className="text-xs font-black text-blue-400">Supabase Synced</span>
                         </div>
                     </div>
                 </div>
@@ -236,27 +237,80 @@ const AppContent: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [notifications, setNotifications] = useState<{ id: number, message: string, type: string }[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-  
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // --- MIGRATION & DATA LOADING LOGIC ---
   useEffect(() => {
     const initData = async () => {
-      setQuestions(JSON.parse(localStorage.getItem('questions') || '[]'));
-      setFolders(JSON.parse(localStorage.getItem('question_folders') || '[{"id":"default","name":"Mặc định","createdAt":0}]'));
-      setKnowledgeBase(JSON.parse(localStorage.getItem('knowledge_base') || '[]'));
-      setExams(JSON.parse(localStorage.getItem('exams') || '[]'));
-      setIsDataLoaded(true);
-    };
-    initData();
-  }, []);
+      if (!user) {
+         setQuestions([]);
+         setExams([]);
+         setIsDataLoaded(true);
+         return;
+      }
 
+      try {
+        // 1. Fetch from Supabase
+        const dbQuestions = await databaseService.fetchQuestions(user.id);
+        const dbExams = await databaseService.fetchExams(user.id);
+
+        // 2. SAFETY MIGRATION: If DB is empty but LocalStorage has data, migrate it!
+        // We read only once here to perform the migration if needed.
+        const localQuestionsStr = localStorage.getItem('questions');
+        const localExamsStr = localStorage.getItem('exams');
+        
+        let finalQuestions = dbQuestions;
+        let finalExams = dbExams;
+
+        if (dbQuestions.length === 0 && localQuestionsStr) {
+           const localQ = JSON.parse(localQuestionsStr);
+           if (localQ.length > 0) {
+               console.log("Migrating Questions to Supabase...");
+               await databaseService.bulkInsertQuestions(localQ, user.id);
+               finalQuestions = await databaseService.fetchQuestions(user.id); // Re-fetch
+           }
+        }
+
+        if (dbExams.length === 0 && localExamsStr) {
+           const localE = JSON.parse(localExamsStr);
+           if (localE.length > 0) {
+               console.log("Migrating Exams to Supabase...");
+               await databaseService.bulkInsertExams(localE, user.id);
+               finalExams = await databaseService.fetchExams(user.id); // Re-fetch
+           }
+        }
+
+        // 3. Set State
+        setQuestions(finalQuestions);
+        setExams(finalExams);
+
+        // Load non-DB local data (Folders, RAG chunks still local for now or can be migrated later)
+        setFolders(JSON.parse(localStorage.getItem('question_folders') || '[{"id":"default","name":"Mặc định","createdAt":0}]'));
+        setKnowledgeBase(JSON.parse(localStorage.getItem('knowledge_base') || '[]'));
+        
+      } catch (err) {
+        console.error("Failed to initialize data:", err);
+        // Fallback to local storage ONLY if DB fails completely on initial load
+        setQuestions(JSON.parse(localStorage.getItem('questions') || '[]'));
+        setExams(JSON.parse(localStorage.getItem('exams') || '[]'));
+      } finally {
+        setIsDataLoaded(true);
+      }
+    };
+
+    initData();
+  }, [user]);
+
+  // Sync only auxiliary data to local storage. Questions and Exams are now fully DB-managed.
   useEffect(() => {
     if (!isDataLoaded) return;
-    localStorage.setItem('questions', JSON.stringify(questions));
     localStorage.setItem('question_folders', JSON.stringify(folders));
     localStorage.setItem('knowledge_base', JSON.stringify(knowledgeBase));
-    localStorage.setItem('exams', JSON.stringify(exams));
-  }, [questions, folders, knowledgeBase, exams, isDataLoaded]);
+    
+    // Legacy fallback: Keep updating local storage for safety during transition phase
+    // localStorage.setItem('questions', JSON.stringify(questions));
+    // localStorage.setItem('exams', JSON.stringify(exams));
+  }, [questions, exams, folders, knowledgeBase, isDataLoaded]);
 
   const showNotify = (message: string, type: 'success' | 'error' | 'info' | 'warning') => {
     const id = Date.now();
@@ -366,7 +420,14 @@ const AppContent: React.FC = () => {
                     <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherStudents onNotify={showNotify}/></ProtectedRoute>} />
                     <Route path="/lectures" element={<LectureManager onNotify={showNotify}/>} />
                     <Route path="/documents" element={<Documents onUpdateKnowledgeBase={(chunks) => setKnowledgeBase(p => [...p, ...chunks])} onDeleteDocumentData={(id) => setKnowledgeBase(p => p.filter(c => c.docId !== id))} onNotify={showNotify} />} />
-                    <Route path="/generate" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><QuestionGenerator folders={folders} onSaveQuestions={(q)=>setQuestions(p=>[...p,...q])} onNotify={showNotify}/></ProtectedRoute>} />
+                    <Route path="/generate" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><QuestionGenerator folders={folders} onSaveQuestions={async (newQ) => {
+                         // Save to DB via service - Source of Truth
+                         if (user) {
+                           await databaseService.bulkInsertQuestions(newQ, user.id);
+                           const updated = await databaseService.fetchQuestions(user.id);
+                           setQuestions(updated);
+                         }
+                    }} onNotify={showNotify}/></ProtectedRoute>} />
                     <Route path="/bank" element={<ProtectedRoute allowedRoles={['admin', 'teacher']}><QuestionBankManager folders={folders} setFolders={setFolders} exams={exams} setExams={setExams} showNotify={showNotify} /></ProtectedRoute>} />
                     <Route path="/game" element={<GameQuiz folders={folders} />} />
                     <Route path="/settings" element={<Settings onNotify={showNotify} />} />

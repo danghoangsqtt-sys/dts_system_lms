@@ -1,4 +1,181 @@
 
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+// --- SUPABASE DATABASE SCHEMA ---
+export interface Database {
+  public: {
+    Tables: {
+      profiles: {
+        Row: {
+          id: string
+          full_name: string | null
+          avatar_url: string | null
+          email: string | null
+          role: 'admin' | 'teacher' | 'student'
+          status: 'pending' | 'active'
+          class_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id: string
+          full_name?: string | null
+          avatar_url?: string | null
+          email?: string | null
+          role?: 'admin' | 'teacher' | 'student'
+          status?: 'pending' | 'active'
+          class_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          full_name?: string | null
+          avatar_url?: string | null
+          email?: string | null
+          role?: 'admin' | 'teacher' | 'student'
+          status?: 'pending' | 'active'
+          class_id?: string | null
+          updated_at?: string | null
+        }
+      }
+      classes: {
+        Row: {
+          id: string
+          name: string
+          teacher_id: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          teacher_id?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          teacher_id?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+      }
+      questions: {
+        Row: {
+          id: string
+          content: Json 
+          type: string
+          options: string[] | null
+          correct_answer: string | null
+          explanation: string | null
+          bloom_level: string | null
+          category: string | null
+          folder_id: string | null
+          image: string | null
+          is_public_bank: boolean
+          creator_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          content: Json
+          type: string
+          options?: string[] | null
+          correct_answer?: string | null
+          explanation?: string | null
+          bloom_level?: string | null
+          category?: string | null
+          folder_id?: string | null
+          image?: string | null
+          is_public_bank?: boolean
+          creator_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          content?: Json
+          type?: string
+          options?: string[] | null
+          correct_answer?: string | null
+          explanation?: string | null
+          bloom_level?: string | null
+          category?: string | null
+          folder_id?: string | null
+          image?: string | null
+          is_public_bank?: boolean
+          creator_id?: string | null
+          created_at?: string
+        }
+      }
+      exams: {
+        Row: {
+          id: string
+          title: string
+          type: string
+          question_ids: string[]
+          config: Json
+          class_id: string | null
+          creator_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          type: string
+          question_ids: string[]
+          config?: Json
+          class_id?: string | null
+          creator_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          type?: string
+          question_ids?: string[]
+          config?: Json
+          class_id?: string | null
+          creator_id?: string | null
+          created_at?: string
+        }
+      }
+      lectures: {
+        Row: {
+          id: string
+          title: string
+          file_url: string
+          creator_id: string | null
+          shared_with_class_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          file_url: string
+          creator_id?: string | null
+          shared_with_class_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          file_url?: string
+          creator_id?: string | null
+          shared_with_class_id?: string | null
+          created_at?: string
+        }
+      }
+    }
+  }
+}
+
+// --- FRONTEND INTERFACES (CamelCase for UI) ---
 
 export enum QuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
@@ -6,7 +183,6 @@ export enum QuestionType {
 }
 
 export type UserRole = 'admin' | 'teacher' | 'student';
-
 export type UserStatus = 'pending' | 'active';
 
 export interface UserProfile {
@@ -15,15 +191,17 @@ export interface UserProfile {
   fullName: string;
   email?: string;
   avatarUrl?: string;
-  classId?: string;
+  classId?: string; // Mapped from DB class_id
   status: UserStatus;
   updatedAt?: number;
+  className?: string; // Optional UI helper
 }
 
 export interface Class {
   id: string;
   name: string;
-  teacherId?: string;
+  teacherId?: string; // Mapped from DB teacher_id
+  teacherName?: string; // Computed for UI
   isActive: boolean;
   createdAt: number;
 }
@@ -39,13 +217,13 @@ export interface QuestionFolder {
 
 export interface Question {
   id: string;
-  content: any; // JSONB for question content, answers, etc. or string
-  type: string; // e.g., 'MULTIPLE_CHOICE', 'ESSAY'
+  content: any; // Can be string or JSON object from DB
+  type: string; 
   creatorId?: string;
   isPublicBank?: boolean;
   createdAt: number;
   
-  // UI / Extended properties
+  // Frontend/UI standard properties (CamelCase)
   options?: string[];
   correctAnswer?: string;
   explanation?: string;
@@ -54,9 +232,12 @@ export interface Question {
   folderId?: string;
   image?: string;
 
-  // DB properties
+  // DB Reflection (SnakeCase) - kept for compatibility when mapping raw DB responses
   bloom_level?: string;
   is_public_bank?: boolean;
+  folder_id?: string;
+  correct_answer?: string;
+  creator_id?: string;
 }
 
 export interface Exam {
@@ -64,7 +245,7 @@ export interface Exam {
   title: string;
   creatorId?: string;
   sharedWithClassId?: string;
-  config: any; // JSONB for time, number of questions, etc.
+  config: any;
   createdAt: number;
   
   // UI / Extended properties
@@ -85,6 +266,8 @@ export interface Lecture {
   sharedWithClassId?: string;
   createdAt: number;
 }
+
+// --- SYSTEM & AI TYPES ---
 
 export interface PdfMetadata {
   title?: string;

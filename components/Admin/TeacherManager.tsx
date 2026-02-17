@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { UserProfile } from '../../types';
 
@@ -9,25 +8,28 @@ interface TeacherManagerProps {
 }
 
 const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
-  const [teachers, setTeachers] = useState<UserProfile[]>([]);
+  const [activeTab, setActiveTab] = useState<'TEACHERS' | 'CANDIDATES'>('TEACHERS');
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '', fullName: '' });
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchTeachers = async () => {
+  const fetchProfiles = async () => {
     setLoading(true);
     try {
+      // Fetch both teachers and students to manage promotions
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('role', 'teacher');
+        .in('role', ['teacher', 'student'])
+        .order('full_name', { ascending: true });
       
       if (error) throw error;
-      setTeachers(data.map(d => ({
+
+      setUsers(data.map(d => ({
         id: d.id,
-        email: '', 
-        fullName: d.full_name,
-        role: 'teacher',
+        email: d.email || 'N/A', // Email might be restricted by RLS
+        fullName: d.full_name || 'Người dùng hệ thống',
+        role: d.role,
         avatarUrl: d.avatar_url,
         status: d.status || 'active'
       })));
@@ -39,113 +41,122 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
   };
 
   useEffect(() => {
-    fetchTeachers();
+    fetchProfiles();
   }, []);
 
-  const handleAddTeacher = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleUpdateRole = async (userId: string, newRole: 'teacher' | 'student') => {
+    if (!window.confirm(`Bạn có chắc muốn thay đổi quyền của người dùng này thành ${newRole === 'teacher' ? 'Giảng viên' : 'Học viên'}?`)) return;
+
     try {
-      onNotify("Đang xử lý yêu cầu tạo tài khoản...", "info");
-      
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: { full_name: formData.fullName, role: 'teacher' }
-        }
-      });
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId);
 
       if (error) throw error;
-      
-      onNotify("Đã tạo hồ sơ giảng viên thành công.", "success");
-      setShowAddModal(false);
-      setFormData({ email: '', password: '', fullName: '' });
-      fetchTeachers();
+
+      onNotify(`Đã cập nhật vai trò thành công!`, 'success');
+      // Update local state
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     } catch (err: any) {
-      onNotify(err.message, "error");
-    } finally {
-      setLoading(false);
+      onNotify(err.message, 'error');
     }
   };
 
+  const filteredUsers = users.filter(u => {
+    const matchSearch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+    if (activeTab === 'TEACHERS') return u.role === 'teacher' && matchSearch;
+    return u.role === 'student' && matchSearch; // CANDIDATES
+  });
+
   return (
-    <div className="p-8 animate-fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
+    <div className="p-8 animate-fade-in font-[Roboto]">
+      {/* Header & Tabs */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6 border-b border-slate-100 pb-6">
         <div>
           <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-            <i className="fas fa-chalkboard-user text-[#14452F]"></i> Danh sách Giảng viên
+            <i className="fas fa-chalkboard-user text-[#14452F]"></i> Quản lý Nhân sự
           </h2>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 ml-8">Nhân sự đào tạo chính thức</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 ml-8">Phân quyền Giảng viên & Đào tạo</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="bg-[#14452F] text-white px-6 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-[#0F3624] transition-all flex items-center gap-2 active:scale-95"
-        >
-          <i className="fas fa-plus"></i> Cấp tài khoản mới
-        </button>
+        
+        <div className="flex bg-slate-100 p-1 chamfer-sm border border-slate-200">
+            <button 
+                onClick={() => setActiveTab('TEACHERS')} 
+                className={`px-6 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'TEACHERS' ? 'bg-[#14452F] text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}
+            >
+                <i className="fas fa-user-tie"></i> Giảng viên
+            </button>
+            <button 
+                onClick={() => setActiveTab('CANDIDATES')} 
+                className={`px-6 py-2 chamfer-sm text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'CANDIDATES' ? 'bg-[#14452F] text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}
+            >
+                <i className="fas fa-users"></i> Học viên (Ứng viên)
+            </button>
+        </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="mb-6 relative max-w-md">
+         <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+         <input 
+            type="text" 
+            placeholder={activeTab === 'TEACHERS' ? "Tìm kiếm giảng viên..." : "Tìm kiếm học viên để thăng cấp..."}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 chamfer-sm text-sm font-bold text-slate-700 outline-none focus:border-[#14452F] transition-all shadow-sm" 
+         />
+      </div>
+
+      {/* Grid List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {loading && teachers.length === 0 ? (
+        {loading ? (
           <div className="col-span-full py-20 text-center"><i className="fas fa-circle-notch fa-spin text-3xl text-[#14452F]"></i></div>
-        ) : teachers.length === 0 ? (
-          <div className="col-span-full py-20 text-center text-slate-300 font-black uppercase tracking-widest border-2 border-dashed border-slate-200 chamfer-md">Không có dữ liệu giảng viên</div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-300 gap-3 border-2 border-dashed border-slate-200 chamfer-md bg-slate-50">
+             <i className="fas fa-inbox text-4xl"></i>
+             <span className="font-black uppercase tracking-widest text-xs">Không tìm thấy dữ liệu</span>
+          </div>
         ) : (
-          teachers.map(t => (
-            <div key={t.id} className="bg-slate-50 p-6 chamfer-md border border-slate-200 hover:border-[#14452F] hover:shadow-xl transition-all group relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-[#14452F] w-16 h-16 -mr-8 -mt-8 rotate-45"></div>
+          filteredUsers.map(user => (
+            <div key={user.id} className="bg-white p-6 chamfer-md border border-slate-200 hover:border-[#14452F] hover:shadow-xl transition-all group relative overflow-hidden flex flex-col h-full">
               
-              <div className="flex items-start gap-5 relative z-10">
-                <div className="w-14 h-14 bg-white border-2 border-slate-200 chamfer-sm flex items-center justify-center text-2xl text-[#14452F] shadow-sm">
-                  {t.avatarUrl ? <img src={t.avatarUrl} className="w-full h-full object-cover chamfer-sm" /> : <i className="fas fa-user-tie"></i>}
+              <div className="flex items-start gap-4 mb-4">
+                <div className={`w-12 h-12 border-2 chamfer-sm flex items-center justify-center text-xl shadow-sm ${activeTab === 'TEACHERS' ? 'bg-[#E8F5E9] border-[#14452F] text-[#14452F]' : 'bg-slate-100 border-slate-300 text-slate-500'}`}>
+                  {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover chamfer-sm" /> : <i className={`fas ${activeTab === 'TEACHERS' ? 'fa-user-tie' : 'fa-user-graduate'}`}></i>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-black text-slate-800 text-sm uppercase truncate">{t.fullName}</h4>
-                  <div className="flex items-center gap-2 mt-1">
-                     <span className="text-[9px] font-bold bg-[#E8F5E9] text-[#14452F] px-2 py-0.5 chamfer-sm uppercase">Giảng viên</span>
-                     <span className={`text-[8px] font-bold px-2 py-0.5 chamfer-sm uppercase ${t.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {t.status === 'active' ? 'Hoạt động' : 'Khóa'}
+                  <h4 className="font-black text-slate-800 text-sm uppercase truncate leading-tight">{user.fullName}</h4>
+                  <p className="text-[10px] text-slate-400 font-mono truncate mt-1">ID: {user.id.substring(0, 8)}...</p>
+                  <div className="mt-2">
+                     <span className={`text-[8px] font-bold px-2 py-0.5 chamfer-sm uppercase ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {user.status === 'active' ? 'Đã xác thực' : 'Chờ duyệt'}
                      </span>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-mono mt-2 truncate">ID: {t.id.substring(0, 8)}...</p>
                 </div>
+              </div>
+
+              <div className="mt-auto pt-4 border-t border-slate-100">
+                 {activeTab === 'TEACHERS' ? (
+                    <button 
+                        onClick={() => handleUpdateRole(user.id, 'student')}
+                        className="w-full py-2 bg-red-50 text-red-600 border border-red-100 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                        <i className="fas fa-arrow-down"></i> Hủy quyền Giảng viên
+                    </button>
+                 ) : (
+                    <button 
+                        onClick={() => handleUpdateRole(user.id, 'teacher')}
+                        className="w-full py-2 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-900/10"
+                    >
+                        <i className="fas fa-arrow-up"></i> Thăng cấp Giảng viên
+                    </button>
+                 )}
               </div>
             </div>
           ))
         )}
       </div>
-
-      {showAddModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white w-full max-w-md chamfer-lg p-8 shadow-2xl animate-slide-up border-t-4 border-[#14452F]">
-            <div className="mb-8">
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cấp tài khoản Giảng viên</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Thông tin đăng nhập hệ thống</p>
-            </div>
-            
-            <form onSubmit={handleAddTeacher} className="space-y-5">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Họ và tên</label>
-                <input required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" autoFocus placeholder="NGUYEN VAN A" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Email định danh</label>
-                <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" placeholder="email@truong.edu.vn" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Mật khẩu khởi tạo</label>
-                <input required type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" />
-              </div>
-              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy bỏ</button>
-                <button type="submit" className="flex-1 py-3 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-[#0F3624] transition-all">Xác nhận cấp</button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 };
