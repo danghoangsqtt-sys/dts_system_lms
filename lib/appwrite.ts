@@ -1,7 +1,9 @@
+/// <reference types="vite/client" />
 import { Client, Account, Databases, Storage, ID, Query } from 'appwrite';
 
 // Config
 export const APPWRITE_CONFIG = {
+  // TypeScript giờ sẽ hiểu import.meta.env nhờ dòng reference ở trên
   endpoint: import.meta.env.VITE_APPWRITE_ENDPOINT,
   projectId: import.meta.env.VITE_APPWRITE_PROJECT_ID,
   dbId: import.meta.env.VITE_APPWRITE_DB_ID,
