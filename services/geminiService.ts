@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Question, QuestionType, VectorChunk, AppSettings, UserProfile } from "../types";
 import { findRelevantChunks } from "./documentProcessor";
@@ -7,6 +6,7 @@ import { findRelevantChunks } from "./documentProcessor";
 // --- CONFIGURATION ---
 const PRIMARY_MODEL = "gemini-2.5-flash"; 
 const FALLBACK_MODEL = "gemini-flash-latest"; 
+const STORAGE_KEY_API = 'DTS_GEMINI_API_KEY';
 
 const DEFAULT_SETTINGS: AppSettings = {
   modelName: PRIMARY_MODEL, 
@@ -24,15 +24,44 @@ const getSettings = (): AppSettings => {
   return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
 };
 
-const getAI = () => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-  const apiKey = process.env.API_KEY;
+/**
+ * Retrieves the API Key with priority:
+ * 1. User Custom Key (LocalStorage)
+ * 2. System Environment Variable
+ */
+const getDynamicApiKey = (): string | undefined => {
+  const customKey = localStorage.getItem(STORAGE_KEY_API);
+  if (customKey && customKey.trim().length > 0) {
+    return customKey;
+  }
+  return process.env.API_KEY;
+};
+
+const getAI = (specificKey?: string) => {
+  const apiKey = specificKey || getDynamicApiKey();
   
   if (!apiKey) {
-    throw new Error("API Key configuration missing. Please ensure process.env.API_KEY is set.");
+    throw new Error("API Key configuration missing. Please configure it in Settings or set process.env.API_KEY.");
   }
   
   return new GoogleGenAI({ apiKey });
+};
+
+/**
+ * Validates an API Key by making a lightweight request.
+ */
+export const validateApiKey = async (key: string): Promise<boolean> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: key });
+    await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "Hi",
+    });
+    return true;
+  } catch (error) {
+    console.error("API Key Validation Failed:", error);
+    return false;
+  }
 };
 
 /**
