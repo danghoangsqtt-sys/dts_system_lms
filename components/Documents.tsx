@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { DocumentFile, VectorChunk } from '../types';
 import { extractDataFromPDF, chunkText, embedChunks } from '../services/documentProcessor';
@@ -53,7 +54,7 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
     }, [pdf, pageNum, scale]);
 
     return (
-        <div className={`flex-1 flex flex-col bg-[#0F172A] overflow-hidden relative group chamfer-lg border-2 border-[#14452F] ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}>
+        <div className={`flex-1 flex flex-col bg-[#0F172A] overflow-hidden relative group chamfer-lg border-2 border-[#14452F] w-full ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}>
             {/* Toolbar overlay */}
             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#14452F]/90 backdrop-blur-md p-2 chamfer-md flex items-center gap-4 z-10 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <button onClick={() => setPageNum(Math.max(1, pageNum - 1))} className="w-8 h-8 text-white hover:bg-white/10 chamfer-sm flex items-center justify-center"><i className="fas fa-chevron-left"></i></button>
@@ -73,7 +74,7 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
                     </div>
                 ) : (
                     <div className="shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-white chamfer-sm">
-                        <canvas ref={canvasRef} className="max-w-full h-auto" />
+                        <canvas ref={canvasRef} className="block" />
                     </div>
                 )}
             </div>
@@ -149,11 +150,16 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
         setSelectedDoc(newDoc);
         
         const chunks = chunkText(text);
+        // Pass a callback to handle non-blocking UI updates
         const vectorChunks = await embedChunks(newDocId, chunks, (p) => setProgress(20 + Math.round(p * 0.8)));
 
-        onUpdateKnowledgeBase(vectorChunks);
-        setDocs(prev => prev.map(d => d.id === newDocId ? { ...d, isProcessed: true } : d));
-        onNotify("Đã lưu và nạp tri thức RAG thành công!", "success");
+        if (vectorChunks.length > 0) {
+            onUpdateKnowledgeBase(vectorChunks);
+            setDocs(prev => prev.map(d => d.id === newDocId ? { ...d, isProcessed: true } : d));
+            onNotify("Đã lưu và nạp tri thức RAG thành công!", "success");
+        } else {
+            onNotify("Đã lưu tài liệu. (Cảnh báo: Chưa cấu hình AI Key nên không thể tạo chỉ mục hỏi đáp)", "warning");
+        }
     } catch (error: any) {
         onNotify(`Lỗi: ${error.message}`, "error");
     } finally {
@@ -175,20 +181,20 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
     <div className="h-full flex flex-col p-6 gap-6 bg-slate-50 font-[Roboto]">
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-6">
         
-        {/* LEFT: Viewer (70%) */}
-        <div className="flex-1 flex flex-col min-h-[500px]">
+        {/* LEFT: Viewer (Occupies all remaining space: flex-1 w-full) */}
+        <div className="flex-1 flex flex-col min-h-[500px] w-full min-w-0">
             {selectedDoc ? (
                 <PdfViewer url={selectedDoc.url} isFullScreen={isFullScreen} onToggleFullScreen={() => setIsFullScreen(!isFullScreen)} />
             ) : (
-                <div className="flex-1 chamfer-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 bg-slate-100">
+                <div className="flex-1 w-full chamfer-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 bg-slate-100">
                     <i className="fas fa-book-open text-6xl mb-4 text-[#14452F]/20"></i>
                     <p className="font-bold uppercase tracking-widest text-sm">Chọn tài liệu bên phải để xem</p>
                 </div>
             )}
         </div>
 
-        {/* RIGHT: Document List (30%) */}
-        <div className="w-full lg:w-96 flex flex-col gap-6">
+        {/* RIGHT: Document List (Fixed width on Large screens, Stacked on Mobile) */}
+        <div className="w-full lg:w-96 flex flex-col gap-6 shrink-0">
             
             {/* Header Area for List */}
             <div className="flex items-center justify-between bg-white p-5 chamfer-md border border-slate-200 shadow-sm">
@@ -203,7 +209,7 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
             </div>
 
             {/* List Area */}
-            <div className="flex-1 bg-white chamfer-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="flex-1 bg-white chamfer-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[600px] lg:h-auto">
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {allDocs.map(doc => {
                         const isCloud = doc.id.startsWith('cloud_');

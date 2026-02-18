@@ -1,5 +1,4 @@
 
-
 // @google/genai initialization rules followed: use process.env.API_KEY.
 import { GoogleGenAI } from "@google/genai";
 import { VectorChunk, PdfMetadata } from "../types";
@@ -15,6 +14,13 @@ const parsePdfDate = (dateStr: string | undefined): string => {
     return `${raw.substring(6, 8)}/${raw.substring(4, 6)}/${raw.substring(0, 4)}`;
   }
   return dateStr;
+};
+
+// Duplicate helper locally to avoid circular dependencies with geminiService
+const getApiKey = (): string | undefined => {
+    const customKey = localStorage.getItem('DTS_GEMINI_API_KEY');
+    if (customKey && customKey.trim().length > 0) return customKey;
+    return process.env.API_KEY;
 };
 
 export const extractDataFromPDF = async (fileOrUrl: File | string): Promise<{ text: string; metadata: PdfMetadata }> => {
@@ -106,8 +112,14 @@ export const embedChunks = async (
   textChunks: string[],
   onProgress?: (percent: number) => void
 ): Promise<VectorChunk[]> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key is missing from environment variables.");
+  
+  const apiKey = getApiKey();
+  
+  // Safe exit if no key is configured
+  if (!apiKey) {
+      console.warn("Skipping RAG embedding: No API Key configured.");
+      return [];
+  }
   
   const ai = new GoogleGenAI({ apiKey });
   const vectorChunks: VectorChunk[] = [];
@@ -128,6 +140,8 @@ export const embedChunks = async (
         });
       }
     } catch (e: any) {
+      console.warn(`Error embedding chunk ${i}:`, e.message);
+      // Rate limit handling
       if (e.toString().includes('429')) {
         await new Promise(r => setTimeout(r, 4500));
         i--;
@@ -156,7 +170,7 @@ export const findRelevantChunks = async (
 ): Promise<VectorChunk[]> => {
   if (knowledgeBase.length === 0) return [];
   
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) return [];
   
   const ai = new GoogleGenAI({ apiKey });
@@ -175,6 +189,8 @@ export const findRelevantChunks = async (
       .slice(0, topK)
       .map(item => item.chunk);
   } catch (e) {
+    console.error("RAG Lookup Error:", e);
+    // Fallback to simple keyword search
     const lowerQuery = query.toLowerCase();
     return knowledgeBase
       .filter(chunk => chunk.text.toLowerCase().includes(lowerQuery))

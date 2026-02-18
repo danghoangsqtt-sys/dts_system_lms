@@ -29,7 +29,7 @@ const getSettings = (): AppSettings => {
  * 1. User Custom Key (LocalStorage)
  * 2. System Environment Variable
  */
-const getDynamicApiKey = (): string | undefined => {
+export const getDynamicApiKey = (): string | undefined => {
   const customKey = localStorage.getItem(STORAGE_KEY_API);
   if (customKey && customKey.trim().length > 0) {
     return customKey;
@@ -41,7 +41,7 @@ const getAI = (specificKey?: string) => {
   const apiKey = specificKey || getDynamicApiKey();
   
   if (!apiKey) {
-    throw new Error("API Key configuration missing. Please configure it in Settings or set process.env.API_KEY.");
+    throw new Error("Vui lòng nhập Gemini API Key trong phần Cài đặt hệ thống (Settings) để sử dụng các tính năng AI.");
   }
   
   return new GoogleGenAI({ apiKey });
