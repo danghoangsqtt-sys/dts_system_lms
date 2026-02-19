@@ -4,7 +4,7 @@ import AIGeneratorTab from './AIGeneratorTab';
 import ManualCreatorTab from './ManualCreatorTab';
 import ReviewList from './ReviewList';
 import { Link } from 'react-router-dom';
-import { databases, APPWRITE_CONFIG, ID, Query } from '../../lib/appwrite';
+import { databases, storage, APPWRITE_CONFIG, ID, Query } from '../../lib/appwrite';
 import { useAuth } from '../../contexts/AuthContext';
 import { databaseService } from '../../services/databaseService';
 
@@ -68,12 +68,40 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     if (!user) return;
     setIsLoading(true);
     try {
-        await databaseService.bulkInsertQuestions(pendingQuestions, user.id);
+        // --- IMAGE UPLOAD LOGIC ---
+        // Iterate through questions and upload images if imageFile is present
+        const processedQuestions = await Promise.all(pendingQuestions.map(async (q) => {
+            let finalImageUrl = q.image; // Keep existing image if no new file
 
-        onSaveQuestions(pendingQuestions);
+            if (q.imageFile) {
+                try {
+                    // 1. Upload to Storage (Using 'lectures' bucket to reuse logic)
+                    const uploadRes = await storage.createFile(
+                        APPWRITE_CONFIG.buckets.lectures, 
+                        ID.unique(), 
+                        q.imageFile
+                    );
+                    // 2. Get Public View URL
+                    const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, uploadRes.$id);
+                    finalImageUrl = fileUrl;
+                } catch (error) {
+                    console.error("Lỗi upload ảnh cho câu hỏi:", error);
+                    onNotify(`Lỗi upload ảnh cho câu: "${q.content.substring(0, 20)}..."`, "warning");
+                }
+            }
+
+            // Cleanup temp fields (imageFile, previewUrl) and update image URL
+            const { imageFile, previewUrl, ...cleanQ } = q;
+            return { ...cleanQ, image: finalImageUrl };
+        }));
+
+        // --- SAVE TO DB ---
+        await databaseService.bulkInsertQuestions(processedQuestions, user.id);
+
+        onSaveQuestions(processedQuestions);
         setPendingQuestions([]);
         setIsPreviewMode(false);
-        onNotify(`Đã lưu ${pendingQuestions.length} câu hỏi mới vào Ngân hàng dữ liệu Cloud.`, "success");
+        onNotify(`Đã lưu ${processedQuestions.length} câu hỏi mới vào Ngân hàng dữ liệu Cloud.`, "success");
     } catch (err: any) {
         onNotify(`Lỗi lưu trữ: ${err.message}`, "error");
     } finally {
@@ -85,7 +113,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     return (
       <ReviewList 
         questions={pendingQuestions}
-        folders={folders} // Note: ReviewList might still use old folderId logic for display, but that's acceptable for now as we transition.
+        folders={folders} 
         selectedFolderId={selectedFolderId}
         onUpdateQuestion={handleUpdatePending}
         onRemoveQuestion={handleRemovePending}

@@ -22,6 +22,30 @@ const ReviewList: React.FC<ReviewListProps> = ({
   onApproveAll, 
   onCancel 
 }) => {
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const previewUrl = URL.createObjectURL(file);
+    const updatedQ = { 
+        ...questions[index], 
+        imageFile: file, 
+        previewUrl: previewUrl 
+    };
+    onUpdateQuestion(index, updatedQ);
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const updatedQ = { 
+        ...questions[index], 
+        imageFile: undefined, 
+        previewUrl: undefined,
+        image: undefined // Remove existing image if any
+    };
+    onUpdateQuestion(index, updatedQ);
+  };
+
   return (
     <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100 h-full flex flex-col animate-fade-in-up">
       <header className="flex justify-between items-center mb-8 pb-6 border-b border-gray-100">
@@ -40,6 +64,7 @@ const ReviewList: React.FC<ReviewListProps> = ({
       <div className="flex-1 overflow-y-auto space-y-8 pr-2 custom-scrollbar">
         {questions.map((q, i) => {
           const folderName = folders.find(f => f.id === q.folderId)?.name || "Mặc định";
+          const displayImage = q.previewUrl || q.image;
           
           return (
             <div key={q.id} className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100 relative group overflow-hidden transition-all hover:bg-white hover:shadow-xl">
@@ -47,7 +72,7 @@ const ReviewList: React.FC<ReviewListProps> = ({
                
                <button 
                  onClick={() => onRemoveQuestion(i)}
-                 className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white text-gray-300 hover:text-red-500 hover:shadow-md transition-all flex items-center justify-center border border-gray-100"
+                 className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white text-gray-300 hover:text-red-500 hover:shadow-md transition-all flex items-center justify-center border border-gray-100 z-10"
                  title="Xóa câu này khỏi hàng chờ"
                >
                   <i className="fas fa-trash-alt text-xs"></i>
@@ -64,7 +89,7 @@ const ReviewList: React.FC<ReviewListProps> = ({
                   </span>
                </div>
 
-               <div className="mb-6">
+               <div className="mb-4">
                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                        <i className="fas fa-question-circle text-blue-400"></i> Nội dung câu hỏi
                    </p>
@@ -79,15 +104,30 @@ const ReviewList: React.FC<ReviewListProps> = ({
                    </div>
                </div>
 
-               {/* Hiển thị ảnh minh họa nếu có */}
-               {q.image && (
-                 <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm inline-block max-w-full">
-                    <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                        <i className="fas fa-image"></i> Ảnh minh họa đính kèm
-                    </p>
-                    <img src={q.image} alt="Minh họa câu hỏi" className="max-h-48 rounded-xl border border-gray-100 object-contain shadow-inner" />
-                 </div>
-               )}
+               {/* --- IMAGE UPLOAD UI --- */}
+               <div className="mb-6">
+                   {displayImage ? (
+                     <div className="relative inline-block group/img">
+                        <img src={displayImage} alt="Minh họa câu hỏi" className="max-h-48 rounded-xl border border-gray-200 object-contain shadow-sm bg-white" />
+                        <button 
+                            onClick={() => handleRemoveImage(i)}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+                            title="Xóa ảnh"
+                        >
+                            <i className="fas fa-times text-[10px]"></i>
+                        </button>
+                        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-[9px] font-black px-2 py-1 rounded backdrop-blur-sm">
+                            {q.imageFile ? "Ảnh mới (Chờ lưu)" : "Ảnh hiện có"}
+                        </div>
+                     </div>
+                   ) : (
+                     <label className="inline-flex items-center gap-2 bg-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-slate-200 transition-all border border-slate-200 hover:border-slate-300">
+                        <i className="fas fa-image text-lg"></i>
+                        <span>Thêm ảnh minh họa</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageSelect(e, i)} />
+                     </label>
+                   )}
+               </div>
 
                {q.options && q.type === QuestionType.MULTIPLE_CHOICE ? (
                  <div className="space-y-3">

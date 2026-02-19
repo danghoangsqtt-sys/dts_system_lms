@@ -163,6 +163,18 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
       }
   };
 
+  const handleRemoveStudent = async (studentId: string, studentName: string) => {
+      if (!window.confirm(`Bạn có chắc chắn muốn gỡ học viên "${studentName}" khỏi lớp này không?`)) return;
+      
+      try {
+          await databaseService.removeStudentFromClass(studentId);
+          setClassStudents(prev => prev.filter(s => s.id !== studentId));
+          onNotify(`Đã gỡ học viên ${studentName} khỏi lớp.`, "success");
+      } catch (e) {
+          onNotify("Lỗi khi gỡ học viên.", "error");
+      }
+  };
+
   return (
     <div className="p-8 animate-fade-in font-[Roboto]">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
@@ -291,7 +303,8 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                                 <th className="pb-3 pl-2 w-10">STT</th>
                                 <th className="pb-3">Họ tên</th>
                                 <th className="pb-3">Email</th>
-                                <th className="pb-3 text-right">Trạng thái</th>
+                                <th className="pb-3 text-center">Trạng thái</th>
+                                <th className="pb-3 text-right">Tác vụ</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -307,8 +320,17 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                                         </div>
                                     </td>
                                     <td className="py-3 text-xs font-medium text-slate-500 font-mono">{s.email}</td>
-                                    <td className="py-3 text-right">
+                                    <td className="py-3 text-center">
                                         <span className={`text-[8px] font-black px-2 py-1 chamfer-sm uppercase ${s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{s.status === 'active' ? 'Active' : 'Pending'}</span>
+                                    </td>
+                                    <td className="py-3 text-right">
+                                        <button 
+                                            onClick={() => handleRemoveStudent(s.id, s.fullName)}
+                                            className="text-red-300 hover:text-red-500 p-2 transition-all"
+                                            title="Gỡ khỏi lớp học"
+                                        >
+                                            <i className="fas fa-user-minus"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             ))}

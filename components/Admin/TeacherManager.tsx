@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import { UserProfile } from '../../types';
-import { createAuthUserAsAdmin } from '../../services/databaseService';
+import { createAuthUserAsAdmin, databaseService } from '../../services/databaseService';
 
 interface TeacherManagerProps {
   onNotify: (message: string, type: any) => void;
@@ -69,6 +69,18 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
     } catch (err: any) {
       onNotify(err.message, 'error');
     }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+      if (!window.confirm(`CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản "${userName}" không? Dữ liệu không thể khôi phục.`)) return;
+
+      try {
+          await databaseService.deleteUserProfileAndAuth(userId);
+          onNotify(`Đã xóa vĩnh viễn tài khoản ${userName}.`, "success");
+          setUsers(prev => prev.filter(u => u.id !== userId));
+      } catch (err: any) {
+          onNotify("Lỗi xóa tài khoản: " + err.message, "error");
+      }
   };
 
   const handleAddTeacher = async () => {
@@ -169,12 +181,22 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
         ) : (
           filteredUsers.map(user => (
             <div key={user.id} className="bg-white p-6 chamfer-md border border-slate-200 hover:border-[#14452F] hover:shadow-xl transition-all group relative overflow-hidden flex flex-col h-full">
+              
+              {/* DELETE BUTTON */}
+              <button 
+                onClick={() => handleDeleteUser(user.id, user.fullName)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center transition-all z-10"
+                title="Xóa vĩnh viễn"
+              >
+                  <i className="fas fa-trash-alt text-[10px]"></i>
+              </button>
+
               <div className="flex items-start gap-4 mb-4">
                 <div className={`w-12 h-12 border-2 chamfer-sm flex items-center justify-center text-xl shadow-sm ${activeTab === 'TEACHERS' ? 'bg-[#E8F5E9] border-[#14452F] text-[#14452F]' : 'bg-slate-100 border-slate-300 text-slate-500'}`}>
                   {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover chamfer-sm" /> : <i className={`fas ${activeTab === 'TEACHERS' ? 'fa-user-tie' : 'fa-user-graduate'}`}></i>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-black text-slate-800 text-sm uppercase truncate leading-tight">{user.fullName}</h4>
+                  <h4 className="font-black text-slate-800 text-sm uppercase truncate leading-tight pr-6">{user.fullName}</h4>
                   <p className="text-[10px] text-slate-500 font-mono truncate mt-1">{user.email}</p>
                   <p className="text-[9px] text-slate-400 font-mono truncate mt-0.5">ID: {user.id.substring(0, 8)}...</p>
                   <div className="mt-2"><span className={`text-[8px] font-bold px-2 py-0.5 chamfer-sm uppercase ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{user.status === 'active' ? 'Active' : 'Pending'}</span></div>

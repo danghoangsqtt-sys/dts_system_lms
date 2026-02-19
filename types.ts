@@ -232,6 +232,10 @@ export interface Question {
   folderId?: string; // Keeping for compatibility, but 'folder' string is preferred now
   folder?: string;   // NEW: Text-based folder name stored in metadata
   image?: string;
+  
+  // Temporary fields for Upload Logic
+  imageFile?: File;
+  previewUrl?: string;
 
   // DB Reflection (SnakeCase) - kept for compatibility when mapping raw DB responses
   bloom_level?: string;
@@ -252,6 +256,7 @@ export interface Exam {
   // UI / Extended properties
   type?: string;
   questionIds?: string[];
+  folder?: string; // NEW: Support folder organization for exams
   
   // DB properties
   question_ids?: string[];

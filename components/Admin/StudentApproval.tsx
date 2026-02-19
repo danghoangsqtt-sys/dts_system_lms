@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import { UserProfile } from '../../types';
-import { createAuthUserAsAdmin } from '../../services/databaseService';
+import { createAuthUserAsAdmin, databaseService } from '../../services/databaseService';
 
 interface StudentWithClass extends UserProfile {
   className?: string;
@@ -102,6 +102,18 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
     }
   };
 
+  const handleDeleteStudent = async (id: string, name: string) => {
+      if (!window.confirm(`CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản học viên "${name}" không? Hành động này không thể hoàn tác.`)) return;
+
+      try {
+          await databaseService.deleteUserProfileAndAuth(id);
+          onNotify(`Đã xóa học viên ${name}.`, "success");
+          setStudents(prev => prev.filter(s => s.id !== id));
+      } catch (err: any) {
+          onNotify("Lỗi xóa học viên: " + err.message, "error");
+      }
+  };
+
   const handleAddStudent = async () => {
       if (!newStudentName.trim() || !newStudentEmail.trim() || !newStudentPassword.trim()) {
           onNotify("Vui lòng nhập tên, email và mật khẩu.", "warning");
@@ -172,7 +184,16 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
             <div key={s.id} className="bg-white border-l-4 border-orange-400 p-6 chamfer-md shadow-sm hover:shadow-lg transition-all relative group">
               <div className="flex justify-between items-start mb-4">
                  <div className="w-12 h-12 bg-slate-100 chamfer-sm flex items-center justify-center text-slate-500 font-black uppercase text-lg border border-slate-200">{s.fullName.charAt(0)}</div>
-                 <span className="text-[8px] font-black uppercase bg-orange-100 text-orange-600 px-2 py-1 chamfer-sm animate-pulse">Pending</span>
+                 <div className="flex gap-2">
+                     <span className="text-[8px] font-black uppercase bg-orange-100 text-orange-600 px-2 py-1 chamfer-sm animate-pulse">Pending</span>
+                     <button 
+                        onClick={() => handleDeleteStudent(s.id, s.fullName)}
+                        className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all chamfer-sm"
+                        title="Xóa vĩnh viễn"
+                     >
+                         <i className="fas fa-trash-alt text-[10px]"></i>
+                     </button>
+                 </div>
               </div>
               <div className="mb-6">
                  <h4 className="font-black text-slate-800 text-lg uppercase truncate">{s.fullName}</h4>
