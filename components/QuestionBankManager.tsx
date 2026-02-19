@@ -5,7 +5,7 @@ import { formatContent } from '../utils/textFormatter';
 import ExamCreator from './ExamCreator';
 import { databases, APPWRITE_CONFIG, Query, ID } from '../lib/appwrite';
 import { useAuth } from '../contexts/AuthContext';
-import { databaseService } from '../services/databaseService';
+import { databaseService, fetchCustomFolders, createCustomFolder, deleteCustomFolder } from '../services/databaseService';
 
 interface QuestionBankManagerProps {
   folders: QuestionFolder[];
@@ -33,18 +33,10 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   
   // Folder State (Questions)
   const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
-  const [customFolders, setCustomFolders] = useState<string[]>(() => {
-      try {
-          const saved = localStorage.getItem('dts_custom_folders');
-          return saved ? JSON.parse(saved) : [];
-      } catch { return []; }
-  });
+  const [customFolders, setCustomFolders] = useState<string[]>([]);
 
   // --- EXAM MANAGER STATE (Task Requirement) ---
-  const [examCustomFolders, setExamCustomFolders] = useState<string[]>(() => {
-      const saved = localStorage.getItem('dts_exam_folders');
-      return saved ? JSON.parse(saved) : [];
-  });
+  const [examCustomFolders, setExamCustomFolders] = useState<string[]>([]);
   const [selectedExamFolder, setSelectedExamFolder] = useState<string>('ALL');
   const [selectedExamIds, setSelectedExamIds] = useState<string[]>([]);
   const [isDeletingExamBulk, setIsDeletingExamBulk] = useState(false);
@@ -52,13 +44,18 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const [examTargetMoveFolder, setExamTargetMoveFolder] = useState('');
   const [isMovingExamBulk, setIsMovingExamBulk] = useState(false);
 
+  // Fetch folders from Cloud (Appwrite)
   useEffect(() => {
-      localStorage.setItem('dts_custom_folders', JSON.stringify(customFolders));
-  }, [customFolders]);
-
-  useEffect(() => { 
-      localStorage.setItem('dts_exam_folders', JSON.stringify(examCustomFolders)); 
-  }, [examCustomFolders]);
+      const loadFolders = async () => {
+          const [qFolders, eFolders] = await Promise.all([
+              fetchCustomFolders('question'),
+              fetchCustomFolders('exam')
+          ]);
+          setCustomFolders(qFolders);
+          setExamCustomFolders(eFolders);
+      };
+      loadFolders();
+  }, []);
 
   // Edit State
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
@@ -73,50 +70,54 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const [targetMoveFolder, setTargetMoveFolder] = useState('');
   const [isMovingBulk, setIsMovingBulk] = useState(false);
 
+  // Assign Exam to Class State
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [examToAssign, setExamToAssign] = useState<any>(null);
+  const [selectedClassToAssign, setSelectedClassToAssign] = useState<string>('');
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  useEffect(() => {
+      const loadClasses = async () => {
+          try {
+              const cls = await databaseService.fetchClasses();
+              setAvailableClasses(cls);
+          } catch (err) { console.error('Lỗi tải danh sách lớp:', err); }
+      };
+      loadClasses();
+  }, []);
+
+  const openAssignModal = (exam: any) => {
+      setExamToAssign(exam);
+      setSelectedClassToAssign(exam.class_id || exam.sharedWithClassId || '');
+      setIsAssignModalOpen(true);
+  };
+
+  const handleAssignSubmit = async () => {
+      if (!examToAssign) return;
+      setIsAssigning(true);
+      try {
+          await databaseService.updateExam(examToAssign.id, { class_id: selectedClassToAssign || null });
+          setDbExams(prev => prev.map(e => e.id === examToAssign.id ? { ...e, class_id: selectedClassToAssign || null, sharedWithClassId: selectedClassToAssign || null } : e));
+          setIsAssignModalOpen(false);
+          setExamToAssign(null);
+          showNotify('Đã cập nhật trạng thái giao đề thành công!', 'success');
+      } catch (error: any) {
+          console.error('Lỗi khi giao đề:', error);
+          showNotify('Có lỗi xảy ra khi cập nhật lớp: ' + error.message, 'error');
+      } finally {
+          setIsAssigning(false);
+      }
+  };
+
   const fetchDbQuestions = async () => {
+    if (!user) return;
     setLoading(true);
     setSelectedQuestionIds([]); 
     try {
-        const queries = []; 
-        if (viewScope === 'MINE') {
-            queries.push(Query.equal('creator_id', user?.id || ''));
-        } else {
-            queries.push(Query.equal('is_public_bank', true));
-        }
-        queries.push(Query.orderDesc('$createdAt'));
-        queries.push(Query.limit(100));
-
-        const response = await databases.listDocuments(
-            APPWRITE_CONFIG.dbId,
-            APPWRITE_CONFIG.collections.questions,
-            queries
-        );
-        
-        const mappedQuestions = response.documents.map(d => {
-             let meta: any = {};
-             try { meta = JSON.parse(d.metadata || '{}'); } catch(e) {}
-             const folder = meta.folder || d.folder_id || 'Mặc định';
-             
-             return {
-                 id: d.$id,
-                 content: d.content, 
-                 type: d.type as QuestionType,
-                 bloom_level: d.bloom_level,
-                 category: d.category,
-                 is_public_bank: d.is_public_bank,
-                 creatorId: d.creator_id,
-                 createdAt: new Date(d.$createdAt).getTime(),
-                 options: meta.options || [],
-                 correctAnswer: meta.correctAnswer,
-                 explanation: meta.explanation,
-                 image: meta.image,
-                 bloomLevel: meta.bloomLevel,
-                 folder: folder, 
-                 folderId: folder
-             } as Question;
-        });
-
-        setDbQuestions(mappedQuestions);
+        // Use service to fetch with role-based logic
+        const questions = await databaseService.fetchQuestions(user.id, user.role);
+        setDbQuestions(questions);
     } catch (err: any) {
         showNotify("Lỗi tải câu hỏi: " + err.message, 'error');
     } finally {
@@ -125,30 +126,13 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   };
 
   const fetchDbExams = async () => {
+      if (!user) return;
       setLoading(true);
       setSelectedExamIds([]);
       try {
-          const response = await databases.listDocuments(
-            APPWRITE_CONFIG.dbId,
-            APPWRITE_CONFIG.collections.exams,
-            [Query.equal('creator_id', user?.id || '')]
-          );
-          
-          setDbExams(response.documents.map(d => {
-              let config = {};
-              try { config = JSON.parse(d.config || '{}'); } catch(e){}
-              return {
-                  id: d.$id,
-                  title: d.title,
-                  type: d.type,
-                  questionIds: d.question_ids,
-                  config: config,
-                  sharedWithClassId: d.class_id,
-                  creatorId: d.creator_id,
-                  createdAt: new Date(d.$createdAt).getTime(),
-                  folder: (config as any).folder || 'Mặc định'
-              };
-          }));
+          // Use service to fetch with role-based logic
+          const exams = await databaseService.fetchExams(user.id, user.role);
+          setDbExams(exams);
       } catch (err: any) {
           showNotify("Lỗi tải đề thi: " + err.message, 'error');
       } finally {
@@ -180,7 +164,7 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
       if (!editingQuestion || !user) return;
       setIsSaving(true);
       try {
-          const updated = await databaseService.saveQuestion(editingQuestion, user.id);
+          const updated = await databaseService.saveQuestion(editingQuestion, user.id, user.role);
           setDbQuestions(prev => prev.map(q => q.id === updated.id ? updated : q));
           showNotify("Cập nhật câu hỏi thành công!", "success");
           setEditingQuestion(null);
@@ -223,15 +207,24 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
       });
   }, [dbExams, search, selectedExamFolder]);
 
+  // --- Permission Helpers ---
+  const canModify = (creatorId?: string) => {
+      if (!user) return false;
+      return user.role === 'admin' || creatorId === user.id;
+  };
+
   // --- Handlers: Questions Bulk ---
   const handleToggleSelect = (id: string) => setSelectedQuestionIds(prev => prev.includes(id) ? prev.filter(qId => qId !== id) : [...prev, id]);
   const handleToggleSelectAll = (filteredList: Question[]) => {
-      const isAllSelected = filteredList.length > 0 && filteredList.every(q => selectedQuestionIds.includes(q.id));
+      // Only select items user can modify
+      const modifiableList = filteredList.filter(q => canModify(q.creatorId));
+      
+      const isAllSelected = modifiableList.length > 0 && modifiableList.every(q => selectedQuestionIds.includes(q.id));
       if (isAllSelected) {
-          const idsToDeselect = filteredList.map(q => q.id);
+          const idsToDeselect = modifiableList.map(q => q.id);
           setSelectedQuestionIds(prev => prev.filter(id => !idsToDeselect.includes(id)));
       } else {
-          const newIds = filteredList.map(q => q.id);
+          const newIds = modifiableList.map(q => q.id);
           setSelectedQuestionIds(prev => Array.from(new Set([...prev, ...newIds])));
       }
   };
@@ -262,12 +255,14 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   // --- Handlers: Exams Bulk ---
   const handleToggleExamSelect = (id: string) => setSelectedExamIds(prev => prev.includes(id) ? prev.filter(eId => eId !== id) : [...prev, id]);
   const handleToggleExamSelectAll = (filteredList: Exam[]) => {
-      const isAllSelected = filteredList.length > 0 && filteredList.every(e => selectedExamIds.includes(e.id));
+      const modifiableList = filteredList.filter(e => canModify(e.creatorId));
+      
+      const isAllSelected = modifiableList.length > 0 && modifiableList.every(e => selectedExamIds.includes(e.id));
       if (isAllSelected) {
-          const idsToDeselect = filteredList.map(e => e.id);
+          const idsToDeselect = modifiableList.map(e => e.id);
           setSelectedExamIds(prev => prev.filter(id => !idsToDeselect.includes(id)));
       } else {
-          const newIds = filteredList.map(e => e.id);
+          const newIds = modifiableList.map(e => e.id);
           setSelectedExamIds(prev => Array.from(new Set([...prev, ...newIds])));
       }
   };
@@ -295,18 +290,98 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
       } catch (error: any) { showNotify("Lỗi di chuyển: " + error.message, "error"); } finally { setIsMovingExamBulk(false); }
   };
 
-  const handleCreateFolder = () => {
+  const handleCreateFolder = async () => {
       const folderName = window.prompt('Nhập tên thư mục mới:');
       if (folderName && folderName.trim() !== '') {
           const newName = folderName.trim();
-          if (managerTab === 'QUESTIONS') {
-              if (!customFolders.includes(newName)) setCustomFolders([...customFolders, newName]);
-              setSelectedFolder(newName);
+          const moduleName = managerTab === 'QUESTIONS' ? 'question' : 'exam';
+          const currentList = managerTab === 'QUESTIONS' ? customFolders : examCustomFolders;
+          if (!currentList.includes(newName)) {
+              try {
+                  await createCustomFolder(newName, moduleName as 'question' | 'exam');
+                  if (managerTab === 'QUESTIONS') {
+                      setCustomFolders([...customFolders, newName]);
+                      setSelectedFolder(newName);
+                  } else {
+                      setExamCustomFolders([...examCustomFolders, newName]);
+                      setSelectedExamFolder(newName);
+                  }
+                  showNotify(`Đã tạo thư mục "${newName}"`, "success");
+              } catch(e) { alert("Lỗi mạng, không thể tạo thư mục."); }
           } else {
-              if (!examCustomFolders.includes(newName)) setExamCustomFolders([...examCustomFolders, newName]);
-              setSelectedExamFolder(newName);
+              if (managerTab === 'QUESTIONS') setSelectedFolder(newName);
+              else setSelectedExamFolder(newName);
           }
-          showNotify(`Đã tạo thư mục "${newName}"`, "success");
+      }
+  };
+
+  const handleRenameFolder = async (oldName: string) => {
+      if (oldName === 'ALL' || oldName === 'Mặc định') return;
+      const newName = window.prompt('Nhập tên mới cho thư mục:', oldName);
+      if (!newName || newName.trim() === '' || newName === oldName) return;
+
+      const trimmedNewName = newName.trim();
+      const moduleName = managerTab === 'QUESTIONS' ? 'question' : 'exam';
+
+      try {
+          // Xóa folder cũ + tạo folder mới trên Cloud
+          await deleteCustomFolder(oldName, moduleName as 'question' | 'exam');
+          await createCustomFolder(trimmedNewName, moduleName as 'question' | 'exam');
+
+          // Cập nhật state
+          if (managerTab === 'QUESTIONS') {
+              setCustomFolders(prev => prev.map(f => f === oldName ? trimmedNewName : f));
+          } else {
+              setExamCustomFolders(prev => prev.map(f => f === oldName ? trimmedNewName : f));
+          }
+
+          // Cập nhật database items trong folder
+          const itemsInFolder = managerTab === 'QUESTIONS'
+              ? dbQuestions.filter(q => q.folder === oldName)
+              : dbExams.filter(e => e.folder === oldName);
+
+          if (itemsInFolder.length > 0) {
+              if (managerTab === 'QUESTIONS') {
+                  await Promise.all(itemsInFolder.map(q => databaseService.updateQuestion(q.id, { folder: trimmedNewName })));
+                  setDbQuestions(prev => prev.map(q => q.folder === oldName ? { ...q, folder: trimmedNewName } : q));
+              } else {
+                  await Promise.all(itemsInFolder.map(e => databaseService.updateExam(e.id, { folder: trimmedNewName })));
+                  setDbExams(prev => prev.map(e => e.folder === oldName ? { ...e, folder: trimmedNewName } : e));
+              }
+          }
+
+          showNotify(`Đã đổi tên thư mục thành "${trimmedNewName}"`, 'success');
+      } catch (error: any) {
+          showNotify('Lỗi khi đổi tên: ' + error.message, 'error');
+      }
+
+      if (managerTab === 'QUESTIONS' && selectedFolder === oldName) setSelectedFolder(trimmedNewName);
+      if (managerTab === 'EXAMS' && selectedExamFolder === oldName) setSelectedExamFolder(trimmedNewName);
+  };
+
+  const handleDeleteFolder = async (folderName: string) => {
+      if (folderName === 'ALL' || folderName === 'Mặc định') return;
+      const itemsInFolder = managerTab === 'QUESTIONS'
+          ? dbQuestions.filter(q => q.folder === folderName)
+          : dbExams.filter(e => e.folder === folderName);
+
+      if (itemsInFolder.length > 0) {
+          showNotify(`Thư mục đang chứa ${itemsInFolder.length} mục. Vui lòng di chuyển hoặc xóa trước.`, 'warning');
+          return;
+      }
+      if (window.confirm(`Bạn có chắc muốn xóa thư mục "${folderName}" rỗng này không?`)) {
+          const moduleName = managerTab === 'QUESTIONS' ? 'question' : 'exam';
+          try {
+              await deleteCustomFolder(folderName, moduleName as 'question' | 'exam');
+              if (managerTab === 'QUESTIONS') {
+                  setCustomFolders(prev => prev.filter(f => f !== folderName));
+                  if (selectedFolder === folderName) setSelectedFolder('ALL');
+              } else {
+                  setExamCustomFolders(prev => prev.filter(f => f !== folderName));
+                  if (selectedExamFolder === folderName) setSelectedExamFolder('ALL');
+              }
+              showNotify(`Đã xóa thư mục "${folderName}"`, 'info');
+          } catch(e) { alert("Lỗi khi xóa thư mục."); }
       }
   };
 
@@ -315,8 +390,9 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
 
   const handleSaveExamToDb = async (exam: Exam) => {
       try {
-          exam.folder = selectedExamFolder !== 'ALL' ? selectedExamFolder : 'Mặc định';
-          await databaseService.saveExam(exam, user?.id || '');
+          // Use folder from ExamCreator's targetExamFolder (already set on exam.folder)
+          if (!exam.folder) exam.folder = 'Mặc định';
+          await databaseService.saveExam(exam, user?.id || '', user?.role);
           showNotify("Đã lưu đề thi thành công.", "success");
           setIsCreatingExam(false);
           fetchDbExams();
@@ -326,11 +402,13 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   };
 
   if (isCreatingExam || viewingExam) {
+    const isReadOnly = viewingExam ? !canModify(viewingExam.creatorId) : false;
     return <ExamCreator 
       questions={dbQuestions} 
       viewExam={viewingExam || undefined}
       onBack={() => { setIsCreatingExam(false); setViewingExam(null); }} 
       onSaveExam={handleSaveExamToDb}
+      readOnly={isReadOnly}
     />;
   }
 
@@ -377,28 +455,52 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-4 space-y-1 pb-4">
                     {(managerTab === 'QUESTIONS' ? uniqueFolders : uniqueExamFolders).map(folder => {
                         const isAll = folder === 'ALL';
+                        const isDefault = folder === 'Mặc định';
                         const isSelected = (managerTab === 'QUESTIONS' ? selectedFolder : selectedExamFolder) === folder;
+                        const canEditFolder = !isAll && !isDefault;
                         
                         return (
-                            <button
+                            <div
                                 key={folder}
-                                onClick={() => managerTab === 'QUESTIONS' ? setSelectedFolder(folder) : setSelectedExamFolder(folder)}
-                                className={`w-full text-left px-4 py-3 chamfer-sm text-xs font-bold transition-all flex items-center justify-between group ${
+                                className={`group flex items-center justify-between px-4 py-3 chamfer-sm text-xs font-bold transition-all ${
                                     isSelected
                                         ? 'bg-[#14452F] text-white shadow-md'
                                         : 'text-slate-600 hover:bg-slate-100'
                                 }`}
                             >
-                                <span className="truncate">{isAll ? (managerTab === 'QUESTIONS' ? 'Tất cả câu hỏi' : 'Tất cả đề thi') : folder}</span>
-                                {isSelected && <i className="fas fa-chevron-right text-[10px]"></i>}
-                            </button>
+                                <button
+                                    onClick={() => managerTab === 'QUESTIONS' ? setSelectedFolder(folder) : setSelectedExamFolder(folder)}
+                                    className="flex-1 text-left truncate"
+                                >
+                                    {isAll ? (managerTab === 'QUESTIONS' ? 'Tất cả câu hỏi' : 'Tất cả đề thi') : folder}
+                                </button>
+                                {canEditFolder && (
+                                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity ml-2 shrink-0">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleRenameFolder(folder); }} 
+                                            className={`w-6 h-6 flex items-center justify-center chamfer-sm transition-all ${isSelected ? 'hover:bg-white/20 text-white/70 hover:text-yellow-300' : 'hover:bg-yellow-100 text-slate-400 hover:text-yellow-600'}`}
+                                            title="Đổi tên"
+                                        >
+                                            <i className="fas fa-edit text-[10px]"></i>
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder); }} 
+                                            className={`w-6 h-6 flex items-center justify-center chamfer-sm transition-all ${isSelected ? 'hover:bg-white/20 text-white/70 hover:text-red-300' : 'hover:bg-red-100 text-slate-400 hover:text-red-500'}`}
+                                            title="Xóa thư mục"
+                                        >
+                                            <i className="fas fa-trash-alt text-[10px]"></i>
+                                        </button>
+                                    </div>
+                                )}
+                                {!canEditFolder && isSelected && <i className="fas fa-chevron-right text-[10px]"></i>}
+                            </div>
                         );
                     })}
                 </div>
                 
                 <div className="mt-auto px-4 pt-6 pb-4 border-t border-slate-100">
                     <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                        <span>Scope: {viewScope === 'MINE' ? 'Cá nhân' : 'Public'}</span>
+                        <span>Scope: {user?.role === 'student' ? 'Học viên' : 'Giảng viên/Admin'}</span>
                         <i className="fas fa-database"></i>
                     </div>
                 </div>
@@ -481,16 +583,29 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                                 {displayQuestions.length === 0 ? (
                                     <tr><td colSpan={6} className="p-10 text-center text-slate-400 text-xs font-bold uppercase">Không tìm thấy dữ liệu</td></tr>
                                 ) : (
-                                    displayQuestions.map(q => (
+                                    displayQuestions.map(q => {
+                                        const allowed = canModify(q.creatorId);
+                                        return (
                                         <tr key={q.id} className={`border-b border-slate-50 hover:bg-slate-50/80 transition-colors group ${selectedQuestionIds.includes(q.id) ? 'bg-green-50/40' : ''}`}>
-                                            <td className="p-4 text-center"><input type="checkbox" checked={selectedQuestionIds.includes(q.id)} onChange={() => handleToggleSelect(q.id)} className="w-4 h-4 accent-[#14452F] cursor-pointer rounded" /></td>
+                                            <td className="p-4 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedQuestionIds.includes(q.id)} 
+                                                    onChange={() => handleToggleSelect(q.id)} 
+                                                    disabled={!allowed}
+                                                    className="w-4 h-4 accent-[#14452F] cursor-pointer rounded disabled:opacity-30" 
+                                                />
+                                            </td>
                                             <td className="p-4">
-                                                <div className="text-sm font-medium text-slate-700 line-clamp-2 max-w-2xl leading-relaxed" title={typeof q.content === 'string' ? q.content : ''}>{formatContent(typeof q.content === 'string' ? q.content : (q.content as any).content)}</div>
-                                                {/* Hiển thị hình ảnh minh họa nếu câu hỏi có chứa ảnh */}
-                                                {q.image && (
+                                                <div className="text-sm font-medium text-slate-700 line-clamp-2 max-w-2xl leading-relaxed" title={typeof q.content === 'string' ? q.content : ''}>
+                                                    {formatContent(typeof q.content === 'string' ? q.content : (q.content as any).content)}
+                                                    {q.isPublicBank && <span className="inline-block ml-2 bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Chung</span>}
+                                                </div>
+                                                {/* Hiển thị hình ảnh minh họa nếu câu hỏi có */}
+                                                {((q as any).imageUrl || (q as any).image_url || q.image) && (
                                                     <div className="mt-3 mb-2">
                                                         <img 
-                                                            src={q.image} 
+                                                            src={(q as any).imageUrl || (q as any).image_url || q.image} 
                                                             alt="Hình minh họa câu hỏi" 
                                                             className="max-h-32 max-w-full object-contain rounded-md border border-slate-200 shadow-sm"
                                                             onError={(e) => {
@@ -505,7 +620,7 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                                             <td className="p-4"><div className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 chamfer-sm border border-blue-100 w-fit"><i className="fas fa-folder-open text-[10px]"></i> {q.folder || 'Mặc định'}</div></td>
                                             <td className="p-4 text-right">
                                                 <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {viewScope === 'MINE' && (
+                                                    {allowed && (
                                                         <>
                                                             <button onClick={() => setEditingQuestion(q)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white transition-all chamfer-sm shadow-sm"><i className="fas fa-pencil-alt text-xs"></i></button>
                                                             <button onClick={() => deleteQuestion(q.id)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white transition-all chamfer-sm shadow-sm"><i className="fas fa-trash-alt text-xs"></i></button>
@@ -514,7 +629,7 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))
+                                    )})
                                 )}
                             </tbody>
                         </table>
@@ -528,27 +643,52 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                                 <p className="font-black uppercase tracking-widest text-xs">Chưa có đề thi nào trong thư mục này</p>
                             </div>
                         ) : (
-                            displayExams.map(exam => (
+                            displayExams.map(exam => {
+                                const allowed = canModify(exam.creatorId);
+                                const isGlobal = exam.creatorId !== user?.id && user?.role !== 'admin';
+                                return (
                                 <div key={exam.id} className={`bg-white p-6 chamfer-md border border-slate-200 hover:border-[#14452F] transition-all cursor-pointer group flex flex-col h-64 justify-between shadow-sm relative ${selectedExamIds.includes(exam.id) ? 'ring-2 ring-[#14452F] bg-green-50/20' : ''}`}>
                                     <div className="absolute top-4 right-4 z-10" onClick={(e) => e.stopPropagation()}>
-                                        <input type="checkbox" checked={selectedExamIds.includes(exam.id)} onChange={() => handleToggleExamSelect(exam.id)} className="w-5 h-5 accent-[#14452F] cursor-pointer" />
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedExamIds.includes(exam.id)} 
+                                            onChange={() => handleToggleExamSelect(exam.id)} 
+                                            disabled={!allowed}
+                                            className="w-5 h-5 accent-[#14452F] cursor-pointer disabled:opacity-30" 
+                                        />
                                     </div>
-                                    <div onClick={() => setViewingExam({ ...exam, questionIds: exam.questionIds, config: exam.config })}>
+                                    <div onClick={() => setViewingExam({ ...exam, questionIds: exam.questionIds, config: exam.config, creatorId: exam.creatorId })}>
                                         <div className="flex justify-between mb-4">
-                                            <div className="w-10 h-10 bg-[#E8F5E9] chamfer-sm flex items-center justify-center text-[#14452F] font-bold"><i className="fas fa-file-alt"></i></div>
+                                            <div className={`w-10 h-10 chamfer-sm flex items-center justify-center font-bold ${isGlobal ? 'bg-blue-50 text-blue-600' : 'bg-[#E8F5E9] text-[#14452F]'}`}>
+                                                <i className={`fas ${isGlobal ? 'fa-globe' : 'fa-file-alt'}`}></i>
+                                            </div>
                                             <span className="text-[9px] font-black bg-slate-100 px-2 py-1 chamfer-sm text-slate-500 mr-6">{exam.questionIds?.length || 0} Câu</span>
                                         </div>
-                                        <h4 className="font-bold text-slate-800 text-sm leading-snug uppercase line-clamp-2 group-hover:text-[#14452F] transition-colors">{exam.title}</h4>
+                                        <h4 className="font-bold text-slate-800 text-sm leading-snug uppercase line-clamp-2 group-hover:text-[#14452F] transition-colors">
+                                            {exam.title}
+                                            {isGlobal && <span className="inline-block ml-1 text-[9px] bg-blue-100 text-blue-600 px-1.5 rounded align-middle">CHUNG</span>}
+                                            {!exam.sharedWithClassId && !exam.class_id && <span className="inline-block ml-1 text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase font-bold align-middle">Bản nháp</span>}
+                                        </h4>
                                         <div className="mt-2 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 inline-block chamfer-sm"><i className="fas fa-folder-open mr-1"></i> {exam.folder || 'Mặc định'}</div>
                                     </div>
-                                    <div className="pt-4 border-t border-slate-50">
+                                    <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2">
                                             {exam.sharedWithClassId ? <i className="fas fa-users text-green-500"></i> : <i className="fas fa-pencil-alt text-orange-400"></i>}
                                             {exam.sharedWithClassId ? 'Đã giao' : 'Bản nháp'}
+                                            {!allowed && <span className="ml-auto text-xs text-slate-300"><i className="fas fa-lock"></i></span>}
                                         </p>
+                                        {allowed && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); openAssignModal(exam); }} 
+                                                className="text-blue-600 hover:text-blue-800 transition-colors text-xs opacity-0 group-hover:opacity-100"
+                                                title={exam.sharedWithClassId || exam.class_id ? 'Đổi lớp áp dụng' : 'Giao đề cho lớp (Bản nháp)'}
+                                            >
+                                                <i className="fas fa-chalkboard-user"></i>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                            ))
+                            )})
                         )}
                     </div>
                 )}
@@ -634,6 +774,40 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                 </div>
             </div>
         </div>
+      )}
+
+      {/* ASSIGN EXAM TO CLASS MODAL */}
+      {isAssignModalOpen && examToAssign && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+              <div className="bg-white p-6 rounded-xl w-[400px] shadow-2xl">
+                  <h3 className="font-black text-[#14452F] text-lg mb-2">Giao Đề Thi Cho Lớp</h3>
+                  <p className="text-sm text-slate-600 mb-4 font-medium truncate">Đề: {examToAssign.title}</p>
+                  
+                  <div className="mb-6">
+                      <label className="block text-xs font-bold text-[#14452F] uppercase mb-2">Chọn lớp áp dụng</label>
+                      <select 
+                          value={selectedClassToAssign} 
+                          onChange={(e) => setSelectedClassToAssign(e.target.value)}
+                          className="w-full border-2 border-slate-200 p-3 rounded outline-none focus:border-[#14452F] font-medium text-slate-700"
+                      >
+                          <option value="">-- Thu hồi về Bản nháp --</option>
+                          {availableClasses.map((cls: any) => (
+                              <option key={`assign-cls-${cls.id}`} value={cls.id}>
+                                  {cls.name}
+                              </option>
+                          ))}
+                      </select>
+                  </div>
+
+                  <div className="flex gap-2 justify-end">
+                      <button onClick={() => setIsAssignModalOpen(false)} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded">Hủy</button>
+                      <button onClick={handleAssignSubmit} disabled={isAssigning} className="px-4 py-2 bg-[#14452F] text-white font-bold rounded flex items-center gap-2">
+                          {isAssigning ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check"></i>}
+                          Xác nhận
+                      </button>
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );

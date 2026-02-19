@@ -32,7 +32,8 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
       const fetchFolders = async () => {
           if (!user?.id) return;
           try {
-              const questions = await databaseService.fetchQuestions(user.id);
+              // --- CHANGED: Use role ---
+              const questions = await databaseService.fetchQuestions(user.id, user.role);
               const folders = new Set(questions.map(q => q.folder || 'Mặc định'));
               setAvailableFolders(Array.from(folders).sort());
           } catch (e) {
@@ -96,7 +97,8 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         }));
 
         // --- SAVE TO DB ---
-        await databaseService.bulkInsertQuestions(processedQuestions, user.id);
+        // --- CHANGED: Pass user role ---
+        await databaseService.bulkInsertQuestions(processedQuestions, user.id, user.role);
 
         onSaveQuestions(processedQuestions);
         setPendingQuestions([]);

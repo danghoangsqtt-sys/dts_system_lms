@@ -1,11 +1,18 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { DocumentFile, VectorChunk } from './types';
-import { extractDataFromPDF, chunkText, embedChunks } from './services/documentProcessor';
+import { DocumentFile, VectorChunk } from '../types';
+import { extractDataFromPDF, chunkText, embedChunks } from '../services/documentProcessor';
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+import { databases, storage, APPWRITE_CONFIG, ID, Query } from '../lib/appwrite';
+import { useAuth } from '../contexts/AuthContext';
+import { databaseService } from '../services/databaseService';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+// Extend DocumentFile locally to include fileId for cloud operations
+interface CloudDocumentFile extends DocumentFile {
+    fileId?: string;
+}
 
 // Kiểm tra an toàn sự tồn tại của require (Electron) để tránh lỗi Runtime trên Browser
 const ipcRenderer = typeof window !== 'undefined' && window.require 
@@ -152,47 +159,155 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
 };
 
 const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDocumentData, onNotify }) => {
-  const [docs, setDocs] = useState<DocumentFile[]>(() => {
-      const saved = localStorage.getItem('elearning_docs');
-      return saved ? JSON.parse(saved) : [];
-  });
+  const { user } = useAuth();
+  const [docs, setDocs] = useState<CloudDocumentFile[]>([]);
+  const [cloudDocs, setCloudDocs] = useState<DocumentFile[]>([]); // Lectures from teacher
   const [selectedDoc, setSelectedDoc] = useState<DocumentFile | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processingDocId, setProcessingDocId] = useState<string | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  useEffect(() => { localStorage.setItem('elearning_docs', JSON.stringify(docs)); }, [docs]);
+  // TASK 1: Fetch User Documents from Cloud (UPDATED with Role-based Service)
+  useEffect(() => {
+      const fetchUserDocuments = async () => {
+          if (!user?.id) return;
+          try {
+              // Use centralized service logic
+              const documents = await databaseService.fetchUserDocuments(user.id, user.role);
+              
+              const mappedDocs: CloudDocumentFile[] = documents.map((doc: any) => ({
+                  id: doc.$id,
+                  name: doc.name,
+                  type: 'PDF',
+                  url: doc.file_url,
+                  uploadDate: new Date(doc.$createdAt).toLocaleDateString('vi-VN'),
+                  isProcessed: doc.is_processed,
+                  fileId: doc.file_id,
+                  metadata: { title: doc.name }
+              }));
+              
+              setDocs(mappedDocs);
+          } catch (error) {
+              console.error("Lỗi tải tài liệu cá nhân:", error);
+          }
+      };
 
+      fetchUserDocuments();
+  }, [user]);
+
+  // Fetch Cloud Lectures (Existing Logic)
+  useEffect(() => {
+    if (user?.role === 'student' && user.classId) {
+      const fetchLectures = async () => {
+        try {
+          const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.lectures,
+            [Query.equal('shared_with_class_id', user.classId)]
+          );
+          if (response.documents) {
+            setCloudDocs(response.documents.map((l: any) => ({
+              id: `cloud_${l.$id}`,
+              name: l.title,
+              type: 'PDF',
+              url: l.file_url,
+              uploadDate: new Date(l.$createdAt).toLocaleDateString('vi-VN'),
+              isProcessed: true,
+              metadata: { title: l.title }
+            })));
+          }
+        } catch (error) {
+          console.error("Failed to fetch lectures:", error);
+        }
+      }
+      fetchLectures();
+    }
+  }, [user]);
+
+  const allDocs = [...cloudDocs, ...docs];
+
+  // TASK 2: Upload File Logic
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || file.type !== 'application/pdf') return onNotify("Vui lòng tải tệp PDF.", "error");
+    if (!user?.id) return onNotify("Vui lòng đăng nhập.", "warning");
 
-    const newDocId = Date.now().toString();
     setIsProcessing(true);
-    setProcessingDocId(newDocId);
     setProgress(5);
 
     try {
-        let persistentUrl = URL.createObjectURL(file);
-        const { text, metadata } = await extractDataFromPDF(file);
+        // 1. Upload to Storage
+        const uploadResponse = await storage.createFile(
+            APPWRITE_CONFIG.buckets.lectures, // Reusing bucket
+            ID.unique(),
+            file
+        );
+        const fileId = uploadResponse.$id;
+        const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, fileId);
+
+        // 2. Create DB Entry (Pending status)
+        // If Admin creates, make it Global
+        const isGlobal = user.role === 'admin';
         
-        const newDoc: DocumentFile = {
-            id: newDocId, name: file.name, type: 'PDF', url: persistentUrl,
-            uploadDate: new Date().toLocaleDateString('vi-VN'), isProcessed: false, metadata: metadata
+        const docRecord = await databases.createDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.user_documents,
+            ID.unique(),
+            {
+                user_id: user.id,
+                name: file.name,
+                file_id: fileId,
+                file_url: fileUrl,
+                is_processed: false,
+                is_global: isGlobal // Set Global flag
+            }
+        );
+
+        const newDocId = docRecord.$id;
+        setProcessingDocId(newDocId);
+
+        // Update UI immediately
+        const newLocalDoc: CloudDocumentFile = {
+            id: newDocId,
+            name: file.name,
+            type: 'PDF',
+            url: fileUrl,
+            fileId: fileId,
+            uploadDate: new Date().toLocaleDateString('vi-VN'),
+            isProcessed: false,
+            metadata: { title: file.name }
         };
-        
-        setDocs(prev => [newDoc, ...prev]);
-        setSelectedDoc(newDoc);
+        setDocs(prev => [newLocalDoc, ...prev]);
+        setSelectedDoc(newLocalDoc);
+
+        // 3. Extract & Embed
+        // Pass the FILE object directly for local processing (faster/safer than downloading URL)
+        const { text, metadata } = await extractDataFromPDF(file); 
         
         const chunks = chunkText(text);
         const vectorChunks = await embedChunks(newDocId, chunks, (p) => setProgress(20 + Math.round(p * 0.8)));
 
-        onUpdateKnowledgeBase(vectorChunks);
-        setDocs(prev => prev.map(d => d.id === newDocId ? { ...d, isProcessed: true } : d));
-        onNotify("Đã lưu và nạp tri thức RAG thành công!", "success");
+        // 4. Update DB Entry (Processed status)
+        await databases.updateDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.user_documents,
+            newDocId,
+            { is_processed: true }
+        );
+
+        if (vectorChunks.length > 0) {
+            onUpdateKnowledgeBase(vectorChunks);
+            setDocs(prev => prev.map(d => d.id === newDocId ? { ...d, isProcessed: true } : d));
+            onNotify("Đã lưu và nạp tri thức RAG thành công!", "success");
+        } else {
+            onNotify("Đã lưu tài liệu. (Cảnh báo: Lỗi Embedding AI - Vui lòng kiểm tra API Key)", "warning");
+        }
+
     } catch (error: any) {
+        console.error(error);
         onNotify(`Lỗi: ${error.message}`, "error");
+        // Optional: Cleanup if upload failed in DB but succeeded in storage
     } finally {
         setIsProcessing(false);
         setProcessingDocId(null);
@@ -200,11 +315,35 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
     }
   };
 
-  const deleteDoc = (doc: DocumentFile) => {
+  // TASK 3: Delete File Logic
+  const deleteDoc = async (doc: CloudDocumentFile) => {
+      if (doc.id.startsWith('cloud_')) return;
       if (!window.confirm(`Xóa tài liệu "${doc.name}"?`)) return;
-      setDocs(prev => prev.filter(d => d.id !== doc.id));
-      onDeleteDocumentData(doc.id);
-      if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+
+      try {
+          // 1. Delete from DB
+          await databases.deleteDocument(
+              APPWRITE_CONFIG.dbId, 
+              APPWRITE_CONFIG.collections.user_documents, 
+              doc.id
+          );
+
+          // 2. Delete from Storage (if fileId exists)
+          if (doc.fileId) {
+              await storage.deleteFile(APPWRITE_CONFIG.buckets.lectures, doc.fileId);
+          }
+
+          // 3. Update UI & Knowledge Base
+          setDocs(prev => prev.filter(d => d.id !== doc.id));
+          onDeleteDocumentData(doc.id);
+          
+          if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+          onNotify("Đã xóa tài liệu.", "info");
+
+      } catch (error: any) {
+          console.error(error);
+          onNotify(`Lỗi xóa tài liệu: ${error.message}`, "error");
+      }
   };
 
   return (
@@ -212,7 +351,7 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
       <div className="flex justify-between items-center mb-8 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm">
          <div>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Thư viện Tri thức RAG</h2>
-            <p className="text-sm text-gray-500 font-medium italic">Tài liệu PDF được AI phân tích và lưu trữ vector</p>
+            <p className="text-sm text-gray-500 font-medium italic">Tài liệu PDF được AI phân tích và lưu trữ Cloud (Sync)</p>
          </div>
          <label className={`cursor-pointer bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 transition-all hover:bg-blue-700 ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
             {isProcessing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-upload"></i>}
@@ -224,25 +363,30 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
       <div className="flex-1 flex gap-8 min-h-0">
         <div className="w-80 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden shrink-0">
             <div className="p-6 border-b border-slate-50 bg-gray-50/50 flex justify-between items-center">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giáo trình ({docs.length})</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giáo trình ({allDocs.length})</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {docs.map(doc => (
-                    <div key={doc.id} onClick={() => setSelectedDoc(doc)} className={`p-4 rounded-[1.5rem] border-2 cursor-pointer transition-all relative group ${selectedDoc?.id === doc.id ? 'bg-blue-50 border-blue-500/20' : 'bg-white border-transparent'}`}>
-                        <button onClick={(e) => {e.stopPropagation(); deleteDoc(doc)}} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"><i className="fas fa-trash-alt text-[10px]"></i></button>
-                        <div className="flex gap-4">
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${doc.isProcessed ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-500'}`}>
-                                <i className={`fas ${doc.id === processingDocId ? 'fa-circle-notch fa-spin' : 'fa-file-pdf'} text-lg`}></i>
-                            </div>
-                            <div className="overflow-hidden">
-                                <p className={`font-black text-sm truncate`}>{doc.name}</p>
-                                <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${doc.isProcessed ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                    {doc.isProcessed ? 'Đã học' : doc.id === processingDocId ? `Học ${progress}%` : 'Đang chờ'}
-                                </span>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                {allDocs.map(doc => {
+                    const isCloud = doc.id.startsWith('cloud_');
+                    return (
+                        <div key={doc.id} onClick={() => setSelectedDoc(doc)} className={`p-4 rounded-[1.5rem] border-2 cursor-pointer transition-all relative group ${selectedDoc?.id === doc.id ? 'bg-blue-50 border-blue-500/20' : 'bg-white border-transparent'}`}>
+                            {!isCloud && (
+                                <button onClick={(e) => {e.stopPropagation(); deleteDoc(doc)}} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"><i className="fas fa-trash-alt text-[10px]"></i></button>
+                            )}
+                            <div className="flex gap-4">
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${doc.id === processingDocId ? 'bg-orange-100 text-orange-500' : isCloud ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
+                                    <i className={`fas ${doc.id === processingDocId ? 'fa-circle-notch fa-spin' : isCloud ? 'fa-cloud' : 'fa-file-pdf'} text-lg`}></i>
+                                </div>
+                                <div className="overflow-hidden">
+                                    <p className={`font-black text-sm truncate`}>{doc.name}</p>
+                                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${doc.isProcessed || isCloud ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                        {doc.isProcessed || isCloud ? 'Đã học' : doc.id === processingDocId ? `Học ${progress}%` : 'Đang chờ'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
         <div className="flex-1 bg-[#111827] rounded-[3rem] border border-gray-800 overflow-hidden flex flex-col relative">

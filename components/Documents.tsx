@@ -5,12 +5,15 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { databases, storage, APPWRITE_CONFIG, ID, Query } from '../lib/appwrite';
 import { useAuth } from '../contexts/AuthContext';
+import { databaseService } from '../services/databaseService';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 // Extend DocumentFile locally to include fileId for cloud operations
 interface CloudDocumentFile extends DocumentFile {
     fileId?: string;
+    userId?: string;
+    isGlobal?: boolean;
 }
 
 // Kiểm tra an toàn sự tồn tại của require (Electron) để tránh lỗi Runtime trên Browser
@@ -167,21 +170,15 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
   const [processingDocId, setProcessingDocId] = useState<string | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // TASK 1: Fetch User Documents from Cloud
+  // TASK 1: Fetch User Documents from Cloud (UPDATED with Role-based Service)
   useEffect(() => {
       const fetchUserDocuments = async () => {
           if (!user?.id) return;
           try {
-              const response = await databases.listDocuments(
-                  APPWRITE_CONFIG.dbId,
-                  APPWRITE_CONFIG.collections.user_documents,
-                  [
-                      Query.equal('user_id', user.id),
-                      Query.orderDesc('$createdAt')
-                  ]
-              );
+              // Use centralized service logic with role
+              const documents = await databaseService.fetchUserDocuments(user.id, user.role);
               
-              const mappedDocs: CloudDocumentFile[] = response.documents.map((doc: any) => ({
+              const mappedDocs: CloudDocumentFile[] = documents.map((doc: any) => ({
                   id: doc.$id,
                   name: doc.name,
                   type: 'PDF',
@@ -189,7 +186,9 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
                   uploadDate: new Date(doc.$createdAt).toLocaleDateString('vi-VN'),
                   isProcessed: doc.is_processed,
                   fileId: doc.file_id,
-                  metadata: { title: doc.name }
+                  metadata: { title: doc.name },
+                  userId: doc.user_id,
+                  isGlobal: doc.is_global
               }));
               
               setDocs(mappedDocs);
@@ -252,6 +251,9 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
         const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, fileId);
 
         // 2. Create DB Entry (Pending status)
+        // If Admin creates, make it Global
+        const isGlobal = user.role === 'admin';
+        
         const docRecord = await databases.createDocument(
             APPWRITE_CONFIG.dbId,
             APPWRITE_CONFIG.collections.user_documents,
@@ -261,7 +263,8 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
                 name: file.name,
                 file_id: fileId,
                 file_url: fileUrl,
-                is_processed: false
+                is_processed: false,
+                is_global: isGlobal // Set Global flag
             }
         );
 
@@ -277,7 +280,9 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
             fileId: fileId,
             uploadDate: new Date().toLocaleDateString('vi-VN'),
             isProcessed: false,
-            metadata: { title: file.name }
+            metadata: { title: file.name },
+            userId: user.id,
+            isGlobal: isGlobal
         };
         setDocs(prev => [newLocalDoc, ...prev]);
         setSelectedDoc(newLocalDoc);
@@ -354,11 +359,13 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Thư viện Tri thức RAG</h2>
             <p className="text-sm text-gray-500 font-medium italic">Tài liệu PDF được AI phân tích và lưu trữ Cloud (Sync)</p>
          </div>
-         <label className={`cursor-pointer bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 transition-all hover:bg-blue-700 ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-            {isProcessing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-upload"></i>}
-            {isProcessing ? "ĐANG HỌC..." : "TẢI GIÁO TRÌNH"}
-            <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
-         </label>
+         {user?.role !== 'student' && (
+             <label className={`cursor-pointer bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 transition-all hover:bg-blue-700 ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                {isProcessing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-upload"></i>}
+                {isProcessing ? "ĐANG HỌC..." : "TẢI GIÁO TRÌNH"}
+                <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
+             </label>
+         )}
       </div>
 
       <div className="flex-1 flex gap-8 min-h-0">
@@ -367,19 +374,23 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giáo trình ({allDocs.length})</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                {allDocs.map(doc => {
+                {allDocs.map((doc) => {
                     const isCloud = doc.id.startsWith('cloud_');
+                    const typedDoc = doc as CloudDocumentFile;
                     return (
                         <div key={doc.id} onClick={() => setSelectedDoc(doc)} className={`p-4 rounded-[1.5rem] border-2 cursor-pointer transition-all relative group ${selectedDoc?.id === doc.id ? 'bg-blue-50 border-blue-500/20' : 'bg-white border-transparent'}`}>
-                            {!isCloud && (
-                                <button onClick={(e) => {e.stopPropagation(); deleteDoc(doc)}} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"><i className="fas fa-trash-alt text-[10px]"></i></button>
+                            {!isCloud && (user?.role === 'admin' || typedDoc.userId === user?.id) && (
+                                <button onClick={(e) => {e.stopPropagation(); deleteDoc(typedDoc)}} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"><i className="fas fa-trash-alt text-[10px]"></i></button>
                             )}
                             <div className="flex gap-4">
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${doc.id === processingDocId ? 'bg-orange-100 text-orange-500' : isCloud ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
                                     <i className={`fas ${doc.id === processingDocId ? 'fa-circle-notch fa-spin' : isCloud ? 'fa-cloud' : 'fa-file-pdf'} text-lg`}></i>
                                 </div>
-                                <div className="overflow-hidden">
-                                    <p className={`font-black text-sm truncate`}>{doc.name}</p>
+                                <div className="overflow-hidden flex-1">
+                                    <p className={`font-black text-sm truncate flex items-center gap-2`}>
+                                        {doc.name}
+                                        {typedDoc.isGlobal && <span className="bg-blue-100 text-blue-700 text-[9px] px-1 rounded">Chung</span>}
+                                    </p>
                                     <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${doc.isProcessed || isCloud ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
                                         {doc.isProcessed || isCloud ? 'Đã học' : doc.id === processingDocId ? `Học ${progress}%` : 'Đang chờ'}
                                     </span>

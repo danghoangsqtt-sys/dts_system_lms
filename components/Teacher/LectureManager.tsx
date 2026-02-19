@@ -102,7 +102,8 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
 
         setIsUploading(true);
         try {
-            await databaseService.uploadLecture(formData.file, formData.title, formData.classId, user.id);
+            // --- CHANGED: Pass user role ---
+            await databaseService.uploadLecture(formData.file, formData.title, formData.classId, user.id, user.role);
 
             onNotify("Đã tải bài giảng lên thành công!", "success");
             setShowUploadModal(false);

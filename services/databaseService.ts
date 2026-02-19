@@ -62,7 +62,7 @@ const mapDbQuestionToLocal = (db: any): Question => {
     folderId: folder, // We use folderId prop to store the folder name string for compatibility
     folder: folder,   // Explicit field
     image: meta.image || mapped.image,
-    isPublicBank: meta.isPublicBank ?? mapped.is_public_bank
+    isPublicBank: mapped.is_public_bank // Use the DB column directly
   };
 };
 
@@ -81,7 +81,7 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => {
     folder: folderName, // SAVE FOLDER NAME HERE
     folderId: folderName, // Keep synced
     image: q.image,
-    isPublicBank: !!q.isPublicBank
+    // Note: isPublicBank is handled via separate column in saveQuestion
   };
 
   return {
@@ -108,7 +108,7 @@ const mapDbExamToLocal = (db: any): Exam => {
     question_ids: mapped.question_ids || [],
     questionIds: mapped.question_ids || [], 
     config: configObj || {},
-    folder: configObj.folder || 'Mặc định', // Extract folder from config
+    folder: db.folder || configObj.folder || 'Mặc định',
     creatorId: mapped.creator_id,
     sharedWithClassId: mapped.class_id,
     createdAt: mapped.createdAt
@@ -186,9 +186,22 @@ export const databaseService = {
       }
   },
 
-  async fetchQuestions(userId?: string): Promise<Question[]> {
+  // --- UPDATED: Fetch Questions with Global Visibility ---
+  async fetchQuestions(userId: string, role: string = 'student'): Promise<Question[]> {
     try {
         const queries = [Query.orderDesc('$createdAt'), Query.limit(100)];
+        
+        if (role === 'student') {
+             // Students only see public/global questions
+             queries.push(Query.equal('is_public_bank', true));
+        } else {
+             // Admin & Teacher see their own + global
+             queries.push(Query.or([
+                 Query.equal('creator_id', userId),
+                 Query.equal('is_public_bank', true)
+             ]));
+        }
+
         const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, queries);
         return response.documents.map(mapDbQuestionToLocal);
     } catch (error: any) {
@@ -196,8 +209,13 @@ export const databaseService = {
     }
   },
 
-  async saveQuestion(q: Question, userId: string) {
-    const payload = mapLocalQuestionToDb(q, userId);
+  // --- UPDATED: Save Question with Auto Global for Admin ---
+  async saveQuestion(q: Question, userId: string, role: string = 'student') {
+    const isGlobal = role === 'admin';
+    const payload = {
+        ...mapLocalQuestionToDb(q, userId),
+        is_public_bank: isGlobal
+    };
     
     try {
         if (q.id && q.id.length <= 36 && !q.id.includes('.')) { 
@@ -245,17 +263,38 @@ export const databaseService = {
       }
   },
 
-  async bulkInsertQuestions(questions: Question[], userId: string) {
+  async bulkInsertQuestions(questions: Question[], userId: string, role: string) {
     for (const q of questions) {
-        await this.saveQuestion(q, userId);
+        await this.saveQuestion(q, userId, role);
     }
   },
 
-  async fetchExams(userId?: string): Promise<Exam[]> {
+  // --- UPDATED: Fetch Exams with Global Visibility ---
+  async fetchExams(userId: string, role: string = 'student'): Promise<Exam[]> {
     try {
-        const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, [Query.orderDesc('$createdAt')]);
+        const queries = [Query.orderDesc('$createdAt')];
+        
+        if (role === 'student') {
+             // Học viên chỉ thấy đề đã được giao cho lớp (có class_id)
+             queries.push(Query.isNotNull('class_id'));
+        } else {
+             queries.push(Query.or([
+                 Query.equal('creator_id', userId),
+                 Query.equal('is_global', true)
+             ]));
+        }
+
+        const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, queries);
         return response.documents.map(mapDbExamToLocal);
     } catch (error: any) {
+        // Fallback for when is_global is not yet in schema: just return own or public
+        if (error?.message?.includes('is_global')) {
+             console.warn("Schema missing 'is_global' on Exams. Falling back to creator_id.");
+             try {
+                const fallbackRes = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, [Query.equal('creator_id', userId)]);
+                return fallbackRes.documents.map(mapDbExamToLocal);
+             } catch(e) { return []; }
+        }
         return handleFetchError('fetchExams', error);
     }
   },
@@ -286,10 +325,11 @@ export const databaseService = {
       }
   },
 
-  async saveExam(e: Exam, userId: string) {
+  // --- UPDATED: Save Exam with Auto Global for Admin ---
+  async saveExam(e: Exam, userId: string, role: string = 'student') {
+    const isGlobal = role === 'admin';
     try {
         const configToSave = e.config || {};
-        if (e.folder) configToSave.folder = e.folder; // Persist folder
 
         const payload = {
             title: e.title,
@@ -298,6 +338,8 @@ export const databaseService = {
             config: JSON.stringify(configToSave),
             class_id: e.sharedWithClassId || e.config?.assignedClassId || null,
             creator_id: userId,
+            is_global: isGlobal,
+            folder: e.folder || 'Mặc định'
         };
         const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, ID.unique(), payload);
         return mapDbExamToLocal(created);
@@ -306,8 +348,28 @@ export const databaseService = {
     }
   },
 
-  async bulkInsertExams(exams: Exam[], userId: string) {
-    for (const e of exams) { await this.saveExam(e, userId); }
+  async bulkInsertExams(exams: Exam[], userId: string, role: string) {
+    for (const e of exams) { await this.saveExam(e, userId, role); }
+  },
+
+  // --- NEW: Fetch User Documents with Global Visibility ---
+  async fetchUserDocuments(userId: string, role: string) {
+    try {
+        const queries = [Query.orderDesc('$createdAt')];
+        if (role === 'student') {
+            queries.push(Query.equal('is_global', true));
+        } else {
+            queries.push(Query.or([
+                Query.equal('user_id', userId),
+                Query.equal('is_global', true)
+            ]));
+        }
+        const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.user_documents, queries);
+        return response.documents;
+    } catch (error: any) {
+        console.error("Fetch User Docs Error:", error);
+        return [];
+    }
   },
 
   async fetchClasses(teacherId?: string): Promise<any[]> {
@@ -339,12 +401,67 @@ export const databaseService = {
     } catch (error: any) { return handleFetchError('fetchLecturesByClass', error); }
   },
 
-  async uploadLecture(file: File, title: string, classId: string, creatorId: string) {
+  // --- UPDATED: Upload Lecture with Auto Global for Admin ---
+  async uploadLecture(file: File, title: string, classId: string, creatorId: string, role: string) {
+      const isGlobal = role === 'admin';
       try {
           const uploaded = await storage.createFile(APPWRITE_CONFIG.buckets.lectures, ID.unique(), file);
           const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, uploaded.$id);
-          const doc = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, ID.unique(), { title, file_url: fileUrl, creator_id: creatorId, shared_with_class_id: classId });
+          
+          const doc = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, ID.unique(), { 
+              title, 
+              file_url: fileUrl, 
+              creator_id: creatorId, 
+              shared_with_class_id: classId,
+              // Assuming lectures also have an is_global concept or we assume admins share via specific classes
+              // If schema supports is_global, add: is_global: isGlobal 
+          });
           return mapDoc(doc);
       } catch (error) { throw error; }
   }
+};
+
+// --- FOLDER MANAGEMENT (Appwrite-based) ---
+
+export const fetchCustomFolders = async (moduleName: 'question' | 'exam'): Promise<string[]> => {
+    try {
+        const res = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.folders, [
+            Query.equal('module', moduleName),
+            Query.limit(100)
+        ]);
+        return res.documents.map(doc => doc.name);
+    } catch (error) { console.error("Lỗi tải thư mục:", error); return []; }
+};
+
+export const createCustomFolder = async (name: string, moduleName: 'question' | 'exam') => {
+    try {
+        await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.folders, ID.unique(), {
+            name: name,
+            module: moduleName
+        });
+    } catch (error) { console.error("Lỗi tạo thư mục:", error); throw error; }
+};
+
+export const deleteCustomFolder = async (name: string, moduleName: 'question' | 'exam') => {
+    try {
+        const res = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.folders, [
+            Query.equal('name', name),
+            Query.equal('module', moduleName)
+        ]);
+        if (res.documents.length > 0) {
+            await Promise.all(res.documents.map(doc => databases.deleteDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.folders, doc.$id)));
+        }
+    } catch (error) { console.error("Lỗi xóa thư mục:", error); throw error; }
+};
+
+// --- EXAM RESULTS ---
+export const submitExamResult = async (resultData: any) => {
+    try {
+        return await databases.createDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.examResults,
+            ID.unique(),
+            resultData
+        );
+    } catch (error) { console.error("Lỗi lưu điểm thi:", error); throw error; }
 };

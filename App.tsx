@@ -11,7 +11,6 @@ import { SpeedInsights } from "@vercel/speed-insights/react";
 import Chatbot from "./components/Chatbot";
 import QuestionGenerator from "./components/QuestionGenerator/index";
 import Documents from "./components/Documents";
-import GameQuiz from "./components/GameQuiz";
 import Settings from "./components/Settings";
 import ProfileSettings from "./components/ProfileSettings";
 import QuestionBankManager from "./components/QuestionBankManager";
@@ -20,6 +19,8 @@ import Login from "./components/Login";
 import AdminDashboard from "./components/Admin/AdminDashboard";
 import TeacherStudents from "./components/Teacher/TeacherStudents";
 import LectureManager from "./components/Teacher/LectureManager";
+import OnlineTestManager from "./components/OnlineTest";
+import SelfStudyManager from "./components/SelfStudy";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Question, VectorChunk, QuestionFolder, Exam } from "./types";
 import { databaseService } from "./services/databaseService";
@@ -132,7 +133,7 @@ const Dashboard = ({ questionsCount, examsCount }: any) => {
           </div>
           <div className="relative z-10 flex gap-4 mt-8">
             <Link
-              to="/game"
+              to="/documents"
               className="bg-[#14452F] text-white px-8 py-4 chamfer-md font-black text-xs uppercase tracking-widest shadow-xl hover:bg-[#0F3624] transition-all active:scale-95 flex items-center gap-3"
             >
               <i className="fas fa-rocket"></i> Vào học ngay
@@ -263,16 +264,7 @@ const Dashboard = ({ questionsCount, examsCount }: any) => {
                       Xem bài giảng lớp học
                     </p>
                   </Link>
-                  <Link
-                    to="/game"
-                    className="group p-6 bg-slate-50 border border-slate-200 chamfer-md hover:bg-[#14452F] hover:text-white transition-all cursor-pointer"
-                  >
-                    <i className="fas fa-gamepad text-2xl text-slate-400 group-hover:text-green-400 mb-3 transition-colors"></i>
-                    <h4 className="font-bold text-sm uppercase">Trò chơi</h4>
-                    <p className="text-[10px] text-slate-500 group-hover:text-white/60 mt-1">
-                      Ôn tập tương tác
-                    </p>
-                  </Link>
+
                 </>
               )}
               <Link
@@ -390,12 +382,11 @@ const AppContent: React.FC = () => {
       }
 
       try {
-        // 1. Fetch from Supabase
-        const dbQuestions = await databaseService.fetchQuestions(user.id);
-        const dbExams = await databaseService.fetchExams(user.id);
+        // 1. Fetch from Supabase (Now using role-based fetching)
+        const dbQuestions = await databaseService.fetchQuestions(user.id, user.role);
+        const dbExams = await databaseService.fetchExams(user.id, user.role);
 
         // 2. SAFETY MIGRATION: If DB is empty but LocalStorage has data, migrate it!
-        // We read only once here to perform the migration if needed.
         const localQuestionsStr = localStorage.getItem("questions");
         const localExamsStr = localStorage.getItem("exams");
 
@@ -406,8 +397,8 @@ const AppContent: React.FC = () => {
           const localQ = JSON.parse(localQuestionsStr);
           if (localQ.length > 0) {
             console.log("Migrating Questions to Supabase...");
-            await databaseService.bulkInsertQuestions(localQ, user.id);
-            finalQuestions = await databaseService.fetchQuestions(user.id); // Re-fetch
+            await databaseService.bulkInsertQuestions(localQ, user.id, user.role);
+            finalQuestions = await databaseService.fetchQuestions(user.id, user.role);
           }
         }
 
@@ -415,8 +406,8 @@ const AppContent: React.FC = () => {
           const localE = JSON.parse(localExamsStr);
           if (localE.length > 0) {
             console.log("Migrating Exams to Supabase...");
-            await databaseService.bulkInsertExams(localE, user.id);
-            finalExams = await databaseService.fetchExams(user.id); // Re-fetch
+            await databaseService.bulkInsertExams(localE, user.id, user.role);
+            finalExams = await databaseService.fetchExams(user.id, user.role);
           }
         }
 
@@ -424,7 +415,7 @@ const AppContent: React.FC = () => {
         setQuestions(finalQuestions);
         setExams(finalExams);
 
-        // Load non-DB local data (Folders, RAG chunks still local for now or can be migrated later)
+        // Load non-DB local data (Folders, RAG chunks still local for now)
         setFolders(
           JSON.parse(
             localStorage.getItem("question_folders") ||
@@ -436,7 +427,7 @@ const AppContent: React.FC = () => {
         );
       } catch (err) {
         console.error("Failed to initialize data:", err);
-        // Fallback to local storage ONLY if DB fails completely on initial load
+        // Fallback
         setQuestions(JSON.parse(localStorage.getItem("questions") || "[]"));
         setExams(JSON.parse(localStorage.getItem("exams") || "[]"));
       } finally {
@@ -447,15 +438,11 @@ const AppContent: React.FC = () => {
     initData();
   }, [user]);
 
-  // Sync only auxiliary data to local storage. Questions and Exams are now fully DB-managed.
+  // Sync only auxiliary data to local storage.
   useEffect(() => {
     if (!isDataLoaded) return;
     localStorage.setItem("question_folders", JSON.stringify(folders));
     localStorage.setItem("knowledge_base", JSON.stringify(knowledgeBase));
-
-    // Legacy fallback: Keep updating local storage for safety during transition phase
-    // localStorage.setItem('questions', JSON.stringify(questions));
-    // localStorage.setItem('exams', JSON.stringify(exams));
   }, [questions, exams, folders, knowledgeBase, isDataLoaded]);
 
   const showNotify = (
@@ -609,9 +596,15 @@ const AppContent: React.FC = () => {
                       Tiện ích Mở rộng
                     </div>
                     <SidebarLink
-                      to="/game"
-                      icon="fa-gamepad"
-                      label="Trò chơi Ôn tập"
+                      to="/online-test"
+                      icon="fa-laptop-code"
+                      label="Kiểm tra trực tuyến"
+                      onClick={closeSidebar}
+                    />
+                    <SidebarLink
+                      to="/self-study"
+                      icon="fa-book-reader"
+                      label="Ôn tập tự học"
                       onClick={closeSidebar}
                     />
                     <SidebarLink
@@ -723,10 +716,12 @@ const AppContent: React.FC = () => {
                                   await databaseService.bulkInsertQuestions(
                                     newQ,
                                     user.id,
+                                    user.role
                                   );
                                   const updated =
                                     await databaseService.fetchQuestions(
                                       user.id,
+                                      user.role
                                     );
                                   setQuestions(updated);
                                 }
@@ -750,9 +745,14 @@ const AppContent: React.FC = () => {
                           </ProtectedRoute>
                         }
                       />
+
                       <Route
-                        path="/game"
-                        element={<GameQuiz folders={folders} />}
+                        path="/online-test"
+                        element={<OnlineTestManager user={user} />}
+                      />
+                      <Route
+                        path="/self-study"
+                        element={<SelfStudyManager user={user} />}
                       />
                       <Route
                         path="/settings"

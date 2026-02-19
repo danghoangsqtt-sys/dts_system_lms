@@ -89,18 +89,22 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
        </div>
 
         {/* Folder Selection */}
-       <div className="space-y-2">
-          <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Lưu vào thư mục</label>
+       <div className="mt-4 mb-4">
+          <label className="block text-xs font-bold text-[#14452F] uppercase mb-2">
+              <i className="fas fa-folder-open mr-2"></i> Thư mục lưu trữ
+          </label>
           <input 
-            list="folderOptionsAI"
+            type="text"
+            list="ai-folder-options"
             value={targetFolder} 
             onChange={e => setTargetFolder(e.target.value)} 
-            placeholder="Chọn hoặc nhập tên thư mục..."
-            className="w-full p-4 bg-[#E8F5E9]/50 border border-[#14452F]/20 chamfer-sm font-bold text-slate-700 focus:bg-white outline-none transition-all"
+            placeholder="Chọn hoặc tự gõ tên thư mục mới..."
+            className="w-full bg-white border-2 border-slate-200 text-slate-700 px-4 py-3 chamfer-sm font-medium focus:border-[#14452F] focus:ring-0 outline-none transition-all"
           />
-          <datalist id="folderOptionsAI">
-            {availableFolders.map(f => (
-              <option key={f} value={f} />
+          {/* ĐẢM BẢO id của datalist phải khớp chính xác với thuộc tính list của input ở trên */}
+          <datalist id="ai-folder-options">
+            {availableFolders && availableFolders.map((folderName, idx) => (
+              <option key={`ai-folder-${idx}`} value={folderName} />
             ))}
           </datalist>
        </div>

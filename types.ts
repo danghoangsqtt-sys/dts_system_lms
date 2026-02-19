@@ -258,6 +258,11 @@ export interface Exam {
   questionIds?: string[];
   folder?: string; // NEW: Support folder organization for exams
   
+  // Additional properties for Exam Creator
+  subject_name?: string;
+  module_name?: string;
+  exam_type?: string;
+
   // DB properties
   question_ids?: string[];
   class_id?: string;
