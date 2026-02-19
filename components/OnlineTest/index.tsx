@@ -16,6 +16,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
     const [shuffleQ, setShuffleQ] = useState(true);
     const [shuffleO, setShuffleO] = useState(true);
     const [examStatus, setExamStatus] = useState<'draft' | 'published'>('draft');
+    const [maxAttempts, setMaxAttempts] = useState<number>(1);
 
     // Phòng thi
     const [activeExamData, setActiveExamData] = useState<any>(null);
@@ -28,45 +29,54 @@ export default function OnlineTestManager({ user }: { user: any }) {
 
     useEffect(() => {
         const fetchData = async () => {
+            if (!user) return;
+            setLoading(true);
             try {
-                // 1. Tải danh sách Lớp học (phục vụ cho Admin/Giáo viên giao đề)
-                if (user?.role !== 'student') {
-                    const classes = await databaseService.fetchClasses();
-                    setAvailableClasses(classes);
+                // 1. Tải danh sách lớp AN TOÀN (Không sập nếu chưa có API fetchClasses)
+                if (user.role !== 'student') {
+                    try {
+                        if (typeof databaseService.fetchClasses === 'function') {
+                            const classes = await databaseService.fetchClasses();
+                            setAvailableClasses(classes || []);
+                        }
+                    } catch (classErr) {
+                        console.warn("Chưa có API Class hoặc Lỗi tải Lớp học:", classErr);
+                    }
                 }
 
                 // 2. Tải toàn bộ Đề thi
                 const allExams = await databaseService.fetchExams();
                 
-                // 3. THUẬT TOÁN LỌC PHÂN QUYỀN
-                let filteredExams = allExams;
+                // 3. Lọc đề thi (Chỉ lấy đề có mục đích Kiểm Tra hoặc Cả hai)
+                const onlineExams = allExams.filter((e: any) => e.exam_purpose === 'online_test' || e.exam_purpose === 'both');
                 
-                if (user?.role === 'student') {
-                    // HỌC VIÊN: Chỉ thấy đề Đã Xuất Bản VÀ Giao đúng cho lớp của mình
-                    filteredExams = allExams.filter((e: any) => 
-                        e.status === 'published' && 
-                        e.class_id === user?.class_id && 
-                        e.exam_purpose !== 'self_study'
+                let filteredExams = [];
+                const role = user.role?.toLowerCase();
+
+                if (role === 'student') {
+                    // Học viên: Thấy đề đã Xuất bản + Đúng Lớp
+                    const studentClassId = user.class_id || user.classId || '';
+                    filteredExams = onlineExams.filter((e: any) => 
+                        e.status === 'published' && e.class_id === studentClassId
                     );
-                } else if (user?.role === 'teacher') {
-                    // GIÁO VIÊN: Chỉ thấy đề của mình tạo
-                    filteredExams = allExams.filter((e: any) => 
-                        e.creator_id === user.id && 
-                        e.exam_purpose !== 'self_study'
-                    );
+                } else if (role === 'teacher') {
+                    // Giáo viên: Thấy đề do mình tạo (Bảo toàn cả 2 kiểu biến)
+                    filteredExams = onlineExams.filter((e: any) => e.creatorId === user.id || e.creator_id === user.id);
                 } else {
-                    // ADMIN: Thấy tất cả (trừ đề tự học)
-                    filteredExams = allExams.filter((e: any) => e.exam_purpose !== 'self_study');
+                    // Admin: Thấy toàn bộ đề kiểm tra
+                    filteredExams = onlineExams;
                 }
                 
+                // Sắp xếp đề mới nhất lên đầu
+                filteredExams.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 setExams(filteredExams);
-            } catch (error) {
-                console.error("Lỗi tải dữ liệu Online Test:", error);
-            } finally {
-                setLoading(false);
+            } catch (err) { 
+                console.error('Lỗi tải đề thi Online Test:', err); 
+            } finally { 
+                setLoading(false); 
             }
         };
-        if (user) fetchData();
+        fetchData();
     }, [user]);
 
     const isTeacherOrAdmin = user?.role === 'admin' || user?.role === 'teacher';
@@ -80,6 +90,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
         setShuffleO(exam.shuffle_options !== false);
         setExamStatus(exam.status || 'draft');
         setTargetClassId(exam.class_id || '');
+        setMaxAttempts(exam.max_attempts || 1);
         setConfigModalOpen(true);
     };
 
@@ -93,12 +104,13 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 shuffle_questions: shuffleQ,
                 shuffle_options: shuffleO,
                 status: examStatus,
-                class_id: targetClassId || null
+                class_id: targetClassId || null,
+                max_attempts: maxAttempts
             };
             await databaseService.updateExam(selectedExam.id, payload);
             setExams(prev => prev.map(e => e.id === selectedExam.id ? { ...e, ...payload } : e));
             setConfigModalOpen(false);
-            alert(examStatus === 'published' ? 'Đã xuất bản bài thi thành công!' : 'Đã lưu nháp cấu hình!');
+            alert('Đã lưu cấu hình bài thi Kiểm tra!');
         } catch (e) { alert("Lỗi khi lưu cấu hình!"); }
     };
 
@@ -248,6 +260,17 @@ export default function OnlineTestManager({ user }: { user: any }) {
                                         <option key={cls.$id || cls.id} value={cls.$id || cls.id}>{cls.name}</option>
                                     ))}
                                 </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Số lần thi tối đa</label>
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    value={maxAttempts} 
+                                    onChange={(e) => setMaxAttempts(parseInt(e.target.value) || 1)}
+                                    className="w-full border-2 border-slate-200 p-2 rounded outline-none focus:border-[#14452F]" 
+                                />
                             </div>
 
                             <div>

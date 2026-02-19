@@ -94,24 +94,35 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => {
   };
 };
 
-const mapDbExamToLocal = (db: any): Exam => {
-  const mapped = mapDoc(db);
-  let configObj = mapped.config;
-  if (typeof configObj === 'string') {
-      try { configObj = JSON.parse(configObj); } catch(e) { configObj = {}; }
+const mapDbExamToLocal = (db: any): any => {
+  let configObj: any = {};
+  if (typeof db.config === 'string') {
+      try { configObj = JSON.parse(db.config); } catch(e) {}
+  } else if (db.config) {
+      configObj = db.config;
   }
 
   return {
-    id: mapped.id,
-    title: mapped.title,
-    type: mapped.type,
-    question_ids: mapped.question_ids || [],
-    questionIds: mapped.question_ids || [], 
-    config: configObj || {},
-    folder: db.folder || configObj.folder || 'Mặc định',
-    creatorId: mapped.creator_id,
-    sharedWithClassId: mapped.class_id,
-    createdAt: mapped.createdAt
+    id: db.$id,
+    title: db.title || 'Bài thi không tên',
+    type: db.type || 'EXAM',
+    question_ids: db.question_ids || [],
+    questionIds: db.question_ids || [], 
+    config: configObj,
+    folder: configObj.folder || db.folder || 'Mặc định',
+    creatorId: db.creator_id,
+    createdAt: db.$createdAt,
+    
+    // BÍ QUYẾT: Ưu tiên đọc mọi cài đặt từ chuỗi nén configObj, nếu không có mới tìm ngoài db
+    start_time: configObj.start_time || db.start_time,
+    end_time: configObj.end_time || db.end_time,
+    exam_password: configObj.exam_password || db.exam_password,
+    shuffle_questions: configObj.shuffle_questions !== undefined ? configObj.shuffle_questions : true,
+    shuffle_options: configObj.shuffle_options !== undefined ? configObj.shuffle_options : true,
+    status: configObj.status || db.status || 'draft',
+    exam_purpose: configObj.exam_purpose || db.exam_purpose || 'both',
+    class_id: configObj.class_id || db.class_id || '',
+    max_attempts: configObj.max_attempts || 1 // Mặc định là 1 lần thi
   };
 };
 
@@ -307,20 +318,32 @@ export const databaseService = {
       }
   },
 
-  async updateExam(id: string, updates: Partial<Exam>) {
+  async updateExam(id: string, updates: any) {
       try {
           const doc = await databases.getDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, id);
           let configObj: any = {};
           try { configObj = JSON.parse(doc.config || '{}'); } catch(e) {}
 
-          if (updates.folder) {
-              configObj.folder = updates.folder;
-          }
-          
-          await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, id, {
+          // Nhồi toàn bộ mọi cài đặt vào cục configObj
+          if (updates.folder !== undefined) configObj.folder = updates.folder;
+          if (updates.start_time !== undefined) configObj.start_time = updates.start_time;
+          if (updates.end_time !== undefined) configObj.end_time = updates.end_time;
+          if (updates.exam_password !== undefined) configObj.exam_password = updates.exam_password;
+          if (updates.shuffle_questions !== undefined) configObj.shuffle_questions = updates.shuffle_questions;
+          if (updates.shuffle_options !== undefined) configObj.shuffle_options = updates.shuffle_options;
+          if (updates.status !== undefined) configObj.status = updates.status;
+          if (updates.class_id !== undefined) configObj.class_id = updates.class_id;
+          if (updates.exam_purpose !== undefined) configObj.exam_purpose = updates.exam_purpose;
+          if (updates.max_attempts !== undefined) configObj.max_attempts = updates.max_attempts;
+
+          // Chỉ gửi duy nhất cột config lên Appwrite (Đảm bảo 100% lưu thành công mà không cần tạo thêm cột mới trong DB)
+          const dbPayload = {
               config: JSON.stringify(configObj)
-          });
+          };
+
+          await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, id, dbPayload);
       } catch (error) {
+          console.error("Lỗi cập nhật đề thi:", error);
           throw error;
       }
   },
