@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Question, QuestionType, QuestionFolder } from '../../types';
 
 interface ManualCreatorTabProps {
-  folders: QuestionFolder[];
-  selectedFolderId: string;
+  folders: QuestionFolder[]; // Kept for interface compatibility but we use `availableFolders` string array
+  availableFolders: string[]; // NEW prop
   onQuestionCreated: (question: Question) => void;
   onQuestionsGenerated: (questions: Question[]) => void;
   onNotify: (message: string, type: any) => void;
@@ -15,8 +14,7 @@ interface ManualCreatorTabProps {
 const BLOOM_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
 
 const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({ 
-  folders, 
-  selectedFolderId, 
+  availableFolders, 
   onQuestionCreated, 
   onNotify, 
   isLoading, 
@@ -30,17 +28,11 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     explanation: '',
     bloomLevel: 'Nhận biết',
     category: 'An toàn điện',
-    folderId: selectedFolderId,
+    folder: 'Mặc định', // Changed from folderId to folder string
     image: '' 
   });
 
-  // Sử dụng index để quản lý đáp án đúng trong UI nhằm tránh lỗi khi nội dung các phương án trùng nhau (vd: cùng để trống)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-
-  // Cập nhật folderId khi prop selectedFolderId thay đổi từ parent
-  useEffect(() => {
-    setManualQ(prev => ({ ...prev, folderId: selectedFolderId }));
-  }, [selectedFolderId]);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -51,9 +43,6 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     });
   };
 
-  /**
-   * Xử lý đính kèm ảnh minh họa cho câu hỏi
-   */
   const handleAttachImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -66,10 +55,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     setIsLoading(true);
     try {
         const base64 = await fileToBase64(file);
-        setManualQ(prev => ({ 
-            ...prev, 
-            image: base64 
-        }));
+        setManualQ(prev => ({ ...prev, image: base64 }));
         onNotify("Đã đính kèm ảnh minh họa cho câu hỏi.", "success");
     } catch (err) {
         onNotify("Lỗi khi xử lý hình ảnh.", "error");
@@ -78,15 +64,13 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     }
   };
 
-  /**
-   * Xóa ảnh đính kèm hiện tại
-   */
   const handleRemoveImage = () => {
     setManualQ(prev => ({ ...prev, image: '' }));
   };
 
   const handleAddManual = () => {
     if (!manualQ.content.trim()) return onNotify("Nội dung câu hỏi không được để trống", "warning");
+    if (!manualQ.folder.trim()) return onNotify("Vui lòng nhập tên thư mục lưu trữ", "warning");
     
     let finalCorrectAnswer = manualQ.correctAnswer;
 
@@ -103,12 +87,12 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
       correctAnswer: finalCorrectAnswer,
       id: Math.random().toString(36).substr(2, 9),
       createdAt: Date.now(),
-      options: manualQ.type === QuestionType.MULTIPLE_CHOICE ? manualQ.options : undefined
+      options: manualQ.type === QuestionType.MULTIPLE_CHOICE ? manualQ.options : undefined,
+      folderId: 'default' // Fallback for legacy
     } as Question;
 
     onQuestionCreated(newQuestion);
     
-    // Reset form sau khi thêm thành công
     setManualQ({ 
         ...manualQ, 
         content: '', 
@@ -123,19 +107,21 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in">
-       {/* Folder Selection Dropdown Added at the start of the form */}
+       {/* Folder Selection Input */}
        <div className="space-y-2">
-          <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Thư mục lưu trữ câu hỏi này</label>
-          <select 
-            value={manualQ.folderId} 
-            onChange={e => setManualQ({...manualQ, folderId: e.target.value})} 
+          <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Thư mục / Chủ đề lưu trữ</label>
+          <input 
+            list="folderOptions"
+            value={manualQ.folder} 
+            onChange={e => setManualQ({...manualQ, folder: e.target.value})} 
+            placeholder="Chọn hoặc nhập tên thư mục mới..."
             className="w-full p-4 bg-[#E8F5E9]/50 border border-[#14452F]/20 chamfer-sm font-bold text-slate-700 focus:bg-white outline-none transition-all"
-          >
-            <option value="default">--- Chọn thư mục lưu (Mặc định) ---</option>
-            {folders.filter(f => f.id !== 'default').map(f => (
-              <option key={f.id} value={f.id}>{f.name}</option>
+          />
+          <datalist id="folderOptions">
+            {availableFolders.map(f => (
+              <option key={f} value={f} />
             ))}
-          </select>
+          </datalist>
        </div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -149,7 +135,6 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    className="w-full h-72 p-8 bg-gray-50 border border-gray-200 chamfer-lg outline-none focus:border-[#14452F] font-medium transition-all focus:bg-white focus:shadow-xl custom-scrollbar" 
                 />
                 
-                {/* Preview ảnh minh họa nếu có */}
                 {manualQ.image && (
                     <div className="absolute bottom-24 left-8 right-8 h-32 bg-white/90 backdrop-blur chamfer-md border border-[#14452F]/20 p-2 flex items-center gap-4 shadow-xl group/img animate-fade-in-up">
                         <div className="h-full aspect-square chamfer-sm overflow-hidden border border-gray-100 bg-slate-50 shadow-inner">
@@ -170,12 +155,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
 
                 <label className="absolute bottom-6 right-6 w-14 h-14 bg-white chamfer-sm flex items-center justify-center text-[#14452F] shadow-lg border border-gray-100 cursor-pointer hover:bg-[#14452F] hover:text-white transition-all active:scale-90">
                    {isLoading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : <i className="fas fa-image text-xl"></i>}
-                   <input 
-                     type="file" 
-                     accept="image/*" 
-                     className="hidden" 
-                     onChange={handleAttachImage} 
-                   />
+                   <input type="file" accept="image/*" className="hidden" onChange={handleAttachImage} />
                 </label>
              </div>
           </div>

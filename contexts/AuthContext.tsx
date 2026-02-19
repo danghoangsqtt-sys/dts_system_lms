@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { account, databases, APPWRITE_CONFIG, ID } from '../lib/appwrite';
+import { account, databases, APPWRITE_CONFIG, ID, Query } from '../lib/appwrite';
 import { UserProfile, UserRole, UserStatus } from '../types';
 
 interface AuthContextType {
@@ -85,8 +85,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 2. Đăng nhập ngay lập tức để lấy session
     await account.createEmailPasswordSession(email, pass);
 
-    // 3. Tạo Document Profile (Quan trọng: ID document trùng với ID User)
-    // Tự động tạo link Avatar dựa trên tên
+    // 3. Logic "Hồ sơ chờ" (Pre-registration)
+    // Kiểm tra xem đã có profile nào được tạo trước bởi Admin với email này chưa
+    let finalRole = 'student';
+    let finalClassId = null;
+    let finalStatus = 'active';
+
+    try {
+      const existingProfiles = await databases.listDocuments(
+        APPWRITE_CONFIG.dbId,
+        APPWRITE_CONFIG.collections.profiles,
+        [Query.equal('email', email)]
+      );
+
+      if (existingProfiles.documents.length > 0) {
+        // Tìm thấy hồ sơ chờ, lấy quyền hạn và lớp học đã gán
+        const oldProfile = existingProfiles.documents[0];
+        finalRole = oldProfile.role;
+        finalClassId = oldProfile.class_id;
+        // Xóa hồ sơ chờ (rác) vì ta sẽ tạo hồ sơ chính thức gắn với ID của Auth User
+        await databases.deleteDocument(
+          APPWRITE_CONFIG.dbId,
+          APPWRITE_CONFIG.collections.profiles,
+          oldProfile.$id
+        );
+      }
+    } catch (e) {
+      console.warn("Lỗi kiểm tra hồ sơ chờ:", e);
+    }
+
+    // 4. Tạo Document Profile Chính thức (Quan trọng: ID document trùng với ID User)
     const autoAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
 
     await databases.createDocument(
@@ -95,9 +123,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (await account.get()).$id, // Lấy ID chính xác từ session vừa tạo
         {
             full_name: name,
-            role: 'student', // Mặc định là sinh viên
-            status: 'active',
+            role: finalRole, 
+            status: finalStatus,
             email: email,
+            class_id: finalClassId,
             avatar_url: autoAvatarUrl
         }
     );

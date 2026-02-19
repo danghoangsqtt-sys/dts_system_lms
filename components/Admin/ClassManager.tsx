@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { databases, APPWRITE_CONFIG, Query, ID } from '../../lib/appwrite';
 import { Class, UserProfile } from '../../types';
+import { databaseService } from '../../services/databaseService';
 
 interface ClassWithTeacher extends Class {
   teacherName?: string;
@@ -23,6 +24,12 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
   const [newClassName, setNewClassName] = useState('');
   const [assignData, setAssignData] = useState({ classId: '', teacherId: '' });
 
+  // --- Task 3: New States for Class Details ---
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedClassDetails, setSelectedClassDetails] = useState<ClassWithTeacher | null>(null);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -37,13 +44,13 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
       const teacherRes = await databases.listDocuments(
         APPWRITE_CONFIG.dbId,
         APPWRITE_CONFIG.collections.profiles,
-        [Query.equal('role', 'teacher')]
+        [Query.equal('role', ['teacher'])]
       );
 
       const teacherMap = new Map<string, any>(teacherRes.documents.map(t => [t.$id, t]));
 
       const mappedClasses: ClassWithTeacher[] = classRes.documents.map((c: any) => {
-        const teacher = c.teacher_id ? teacherMap.get(c.teacher_id) : null;
+        const teacher = (c.teacher_id && c.teacher_id !== 'unassigned') ? teacherMap.get(c.teacher_id) : null;
         return {
             id: c.$id,
             name: c.name,
@@ -86,6 +93,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
         ID.unique(),
         { 
           name: newClassName,
+          teacher_id: 'unassigned',
           is_active: true 
         }
       );
@@ -138,6 +146,23 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
     }
   };
 
+  // --- Task 3: Logic implementation ---
+  const handleViewDetails = async (classItem: ClassWithTeacher) => {
+      setSelectedClassDetails(classItem);
+      setShowDetailsModal(true);
+      setLoadingDetails(true);
+      setClassStudents([]);
+
+      try {
+          const students = await databaseService.fetchStudentsByClass(classItem.id);
+          setClassStudents(students);
+      } catch (e) {
+          onNotify("Không thể tải danh sách học viên.", "error");
+      } finally {
+          setLoadingDetails(false);
+      }
+  };
+
   return (
     <div className="p-8 animate-fade-in font-[Roboto]">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
@@ -168,7 +193,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                     <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors group">
                         <td className="px-6 py-4"><span className="font-black text-slate-800 text-sm">{c.name}</span></td>
                         <td className="px-6 py-4">
-                            {c.teacherId ? (
+                            {(c.teacherId && c.teacherId !== 'unassigned') ? (
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 bg-[#E8F5E9] text-[#14452F] chamfer-sm flex items-center justify-center font-bold text-xs">{c.teacherName?.charAt(0)}</div>
                                     <div><p className="text-xs font-bold text-slate-700">{c.teacherName}</p></div>
@@ -180,7 +205,8 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                         <td className="px-6 py-4 text-center">
                             <span className={`px-3 py-1 chamfer-sm text-[9px] font-black uppercase tracking-widest ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{c.isActive ? 'Active' : 'Paused'}</span>
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                            <button onClick={() => handleViewDetails(c)} className="w-10 h-10 chamfer-sm inline-flex items-center justify-center bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all" title="Xem chi tiết lớp"><i className="fas fa-eye"></i></button>
                             <button onClick={() => toggleClassActive(c.id, c.isActive)} className={`w-10 h-10 chamfer-sm inline-flex items-center justify-center transition-all ${c.isActive ? 'bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-[#14452F] text-white hover:bg-[#0F3624]'}`} title={c.isActive ? "Tạm dừng" : "Kích hoạt"}><i className={`fas ${c.isActive ? 'fa-pause' : 'fa-play'}`}></i></button>
                         </td>
                     </tr>
@@ -189,6 +215,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
         </table>
       </div>
 
+      {/* CREATE CLASS MODAL */}
       {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-white w-full max-w-md chamfer-lg p-8 shadow-2xl animate-slide-up border-t-4 border-[#14452F]">
@@ -204,6 +231,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
         </div>, document.body
       )}
 
+      {/* ASSIGN TEACHER MODAL */}
       {showAssignModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-white w-full max-w-md chamfer-lg p-8 shadow-2xl animate-slide-up border-t-4 border-blue-600">
@@ -215,6 +243,83 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                 <button type="button" onClick={() => setShowAssignModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
                 <button onClick={handleAssignTeacher} className="flex-1 py-3 bg-blue-600 text-white chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Lưu phân công</button>
               </div>
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
+      {/* TASK 3: CLASS DETAILS MODAL */}
+      {showDetailsModal && selectedClassDetails && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-3xl chamfer-lg p-0 shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="p-8 border-b border-slate-100 bg-slate-50 chamfer-lg relative">
+                <button onClick={() => setShowDetailsModal(false)} className="absolute top-6 right-6 w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center transition-all"><i className="fas fa-times text-slate-500"></i></button>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Chi tiết lớp {selectedClassDetails.name}</h3>
+                
+                <div className="mt-4 p-4 bg-white border border-slate-200 chamfer-sm flex items-center gap-4">
+                    <div className="w-10 h-10 bg-[#E8F5E9] text-[#14452F] chamfer-sm flex items-center justify-center font-bold text-sm">
+                        {selectedClassDetails.teacherName ? selectedClassDetails.teacherName.charAt(0) : '?'}
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Giáo viên chủ nhiệm</p>
+                        <p className="text-sm font-bold text-slate-800">{selectedClassDetails.teacherName || 'Chưa phân công'}</p>
+                        <p className="text-xs text-slate-500 font-mono">{selectedClassDetails.teacherEmail || 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Body */}
+            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <i className="fas fa-users text-[#14452F]"></i> Danh sách học viên ({classStudents.length})
+                </h4>
+
+                {loadingDetails ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
+                        <i className="fas fa-circle-notch fa-spin text-2xl text-[#14452F]"></i>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Đang tải dữ liệu...</span>
+                    </div>
+                ) : classStudents.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 font-bold uppercase tracking-widest text-xs border-2 border-dashed border-slate-100 chamfer-sm bg-slate-50">
+                        Chưa có học viên nào trong lớp
+                    </div>
+                ) : (
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                <th className="pb-3 pl-2 w-10">STT</th>
+                                <th className="pb-3">Họ tên</th>
+                                <th className="pb-3">Email</th>
+                                <th className="pb-3 text-right">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {classStudents.map((s, idx) => (
+                                <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 group transition-colors">
+                                    <td className="py-3 pl-2 text-xs font-bold text-slate-400">{idx + 1}</td>
+                                    <td className="py-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 group-hover:bg-[#E8F5E9] group-hover:text-[#14452F] flex items-center justify-center text-xs font-black transition-colors">
+                                                {s.fullName.charAt(0)}
+                                            </div>
+                                            <span className="text-sm font-bold text-slate-700">{s.fullName}</span>
+                                        </div>
+                                    </td>
+                                    <td className="py-3 text-xs font-medium text-slate-500 font-mono">{s.email}</td>
+                                    <td className="py-3 text-right">
+                                        <span className={`text-[8px] font-black px-2 py-1 chamfer-sm uppercase ${s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{s.status === 'active' ? 'Active' : 'Pending'}</span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+            
+            {/* Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end chamfer-lg">
+                <button onClick={() => setShowDetailsModal(false)} className="px-8 py-3 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all shadow-lg">Đóng</button>
             </div>
           </div>
         </div>, document.body

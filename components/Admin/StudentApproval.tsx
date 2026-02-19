@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import { UserProfile } from '../../types';
+import { createAuthUserAsAdmin } from '../../services/databaseService';
 
 interface StudentWithClass extends UserProfile {
   className?: string;
@@ -13,6 +15,15 @@ interface StudentApprovalProps {
 const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
   const [students, setStudents] = useState<StudentWithClass[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Add Student Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [newStudentPassword, setNewStudentPassword] = useState(''); // NEW Field
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [classList, setClassList] = useState<any[]>([]);
 
   const fetchPendingStudents = async () => {
     setLoading(true);
@@ -47,7 +58,7 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
         avatarUrl: s.avatar_url,
         updatedAt: s.$updatedAt ? new Date(s.$updatedAt).getTime() : undefined,
         className: classMap.get(s.class_id) || 'Chưa gán lớp',
-        email: '' 
+        email: s.email || '' 
       })));
     } catch (err: any) {
       console.error(err);
@@ -57,8 +68,22 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
     }
   };
 
+  const fetchAllClasses = async () => {
+      try {
+          const response = await databases.listDocuments(
+              APPWRITE_CONFIG.dbId,
+              APPWRITE_CONFIG.collections.classes,
+              [Query.orderDesc('$createdAt'), Query.limit(100)]
+          );
+          setClassList(response.documents.map((d: any) => ({ id: d.$id, name: d.name })));
+      } catch (e) {
+          console.error("Error fetching classes", e);
+      }
+  };
+
   useEffect(() => {
     fetchPendingStudents();
+    fetchAllClasses();
   }, []);
 
   const approveStudent = async (id: string) => {
@@ -77,6 +102,51 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
     }
   };
 
+  const handleAddStudent = async () => {
+      if (!newStudentName.trim() || !newStudentEmail.trim() || !newStudentPassword.trim()) {
+          onNotify("Vui lòng nhập tên, email và mật khẩu.", "warning");
+          return;
+      }
+      
+      if (newStudentPassword.length < 8) {
+          onNotify("Mật khẩu phải có ít nhất 8 ký tự.", "warning");
+          return;
+      }
+
+      setIsCreating(true);
+      try {
+          // 1. Tạo User Identity ở Server Side
+          const authUser = await createAuthUserAsAdmin(newStudentEmail, newStudentPassword, newStudentName);
+          
+          // 2. Tạo Profile Document với ID trùng với Auth User ID
+          await databases.createDocument(
+              APPWRITE_CONFIG.dbId,
+              APPWRITE_CONFIG.collections.profiles,
+              authUser.$id, // Use the real Auth ID
+              {
+                  full_name: newStudentName,
+                  email: newStudentEmail,
+                  role: 'student',
+                  status: 'active', // Auto-activate
+                  class_id: selectedClassId || null,
+                  avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(newStudentName)}&background=random&color=fff`
+              }
+          );
+
+          onNotify("Đã tạo tài khoản & hồ sơ học viên thành công.", "success");
+          setShowAddModal(false);
+          setNewStudentName('');
+          setNewStudentEmail('');
+          setNewStudentPassword('');
+          setSelectedClassId('');
+          fetchPendingStudents();
+      } catch (err: any) {
+          onNotify(err.message, 'error');
+      } finally {
+          setIsCreating(false);
+      }
+  };
+
   return (
     <div className="p-8 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
@@ -86,7 +156,10 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
           </h2>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 ml-8">Danh sách học viên chờ duyệt vào lớp</p>
         </div>
-        <button onClick={fetchPendingStudents} className="bg-slate-100 text-slate-500 px-6 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"><i className="fas fa-sync-alt"></i> Tải lại</button>
+        <div className="flex gap-3">
+            <button onClick={() => setShowAddModal(true)} className="bg-[#14452F] text-white px-6 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all flex items-center gap-2 shadow-lg"><i className="fas fa-user-plus"></i> Thêm Học viên mới</button>
+            <button onClick={fetchPendingStudents} className="bg-slate-100 text-slate-500 px-6 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"><i className="fas fa-sync-alt"></i> Tải lại</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -103,6 +176,7 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
               </div>
               <div className="mb-6">
                  <h4 className="font-black text-slate-800 text-lg uppercase truncate">{s.fullName}</h4>
+                 <p className="text-[10px] text-slate-500 mb-1">{s.email}</p>
                  <div className="flex items-center gap-2 mt-2"><i className="fas fa-layer-group text-slate-400 text-xs"></i><span className="text-xs font-bold text-slate-500 uppercase">{s.className}</span></div>
               </div>
               <button onClick={() => approveStudent(s.id)} className="w-full py-3 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all flex items-center justify-center gap-2 shadow-lg"><i className="fas fa-check"></i> Chấp thuận</button>
@@ -110,6 +184,39 @@ const StudentApproval: React.FC<StudentApprovalProps> = ({ onNotify }) => {
           ))
         )}
       </div>
+
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md chamfer-lg p-8 shadow-2xl animate-slide-up border-t-4 border-[#14452F]">
+            <div className="mb-8"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Thêm Học viên Trực tiếp</h3></div>
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Họ và Tên</label>
+                <input type="text" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" autoFocus placeholder="Ví dụ: Trần Văn B" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Email Đăng nhập</label>
+                <input type="email" value={newStudentEmail} onChange={e => setNewStudentEmail(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" placeholder="student@domain.edu.vn" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Mật khẩu Khởi tạo</label>
+                <input type="password" value={newStudentPassword} onChange={e => setNewStudentPassword(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all" placeholder="Tối thiểu 8 ký tự" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Lớp học</label>
+                <select value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 chamfer-sm outline-none focus:border-[#14452F] focus:bg-white font-bold text-sm text-slate-800 transition-all">
+                    <option value="">-- Chọn lớp (Tùy chọn) --</option>
+                    {classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
+                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
+                <button onClick={handleAddStudent} disabled={isCreating} className="flex-1 py-3 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-[#0F3624] transition-all disabled:opacity-70">{isCreating ? 'Đang tạo...' : 'Tạo & Duyệt ngay'}</button>
+              </div>
+            </div>
+          </div>
+        </div>, document.body
+      )}
     </div>
   );
 };

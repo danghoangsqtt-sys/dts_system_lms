@@ -4,8 +4,9 @@ import AIGeneratorTab from './AIGeneratorTab';
 import ManualCreatorTab from './ManualCreatorTab';
 import ReviewList from './ReviewList';
 import { Link } from 'react-router-dom';
-import { databases, APPWRITE_CONFIG, ID } from '../../lib/appwrite';
+import { databases, APPWRITE_CONFIG, ID, Query } from '../../lib/appwrite';
 import { useAuth } from '../../contexts/AuthContext';
+import { databaseService } from '../../services/databaseService';
 
 interface QuestionGeneratorProps {
   folders: QuestionFolder[];
@@ -22,6 +23,24 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('default');
+  
+  // State to hold unique folder names fetched from DB
+  const [availableFolders, setAvailableFolders] = useState<string[]>(['Mặc định']);
+
+  // Fetch existing folders to provide suggestions
+  useEffect(() => {
+      const fetchFolders = async () => {
+          if (!user?.id) return;
+          try {
+              const questions = await databaseService.fetchQuestions(user.id);
+              const folders = new Set(questions.map(q => q.folder || 'Mặc định'));
+              setAvailableFolders(Array.from(folders).sort());
+          } catch (e) {
+              console.warn("Failed to fetch existing folders", e);
+          }
+      };
+      fetchFolders();
+  }, [user]);
 
   const handleQuestionsGenerated = (questions: Question[]) => {
     setPendingQuestions(questions);
@@ -49,26 +68,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     if (!user) return;
     setIsLoading(true);
     try {
-        for (const q of pendingQuestions) {
-            await databases.createDocument(
-                APPWRITE_CONFIG.dbId,
-                APPWRITE_CONFIG.collections.questions,
-                ID.unique(),
-                {
-                    content: q.content,
-                    type: q.type,
-                    options: q.options,
-                    correct_answer: q.correctAnswer,
-                    explanation: q.explanation,
-                    bloom_level: q.bloomLevel,
-                    category: q.category,
-                    folder_id: q.folderId === 'default' ? null : q.folderId,
-                    creator_id: user.id,
-                    image: q.image,
-                    is_public_bank: false
-                }
-            );
-        }
+        await databaseService.bulkInsertQuestions(pendingQuestions, user.id);
 
         onSaveQuestions(pendingQuestions);
         setPendingQuestions([]);
@@ -85,7 +85,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
     return (
       <ReviewList 
         questions={pendingQuestions}
-        folders={folders}
+        folders={folders} // Note: ReviewList might still use old folderId logic for display, but that's acceptable for now as we transition.
         selectedFolderId={selectedFolderId}
         onUpdateQuestion={handleUpdatePending}
         onRemoveQuestion={handleRemovePending}
@@ -120,9 +120,24 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex-1 p-10 overflow-y-auto custom-scrollbar">
             {activeTab === 'AI' ? (
-            <AIGeneratorTab folders={folders} selectedFolderId={selectedFolderId} onQuestionsGenerated={handleQuestionsGenerated} onNotify={onNotify} isLoading={isLoading} setIsLoading={setIsLoading} />
+            <AIGeneratorTab 
+                folders={folders} 
+                availableFolders={availableFolders}
+                onQuestionsGenerated={handleQuestionsGenerated} 
+                onNotify={onNotify} 
+                isLoading={isLoading} 
+                setIsLoading={setIsLoading} 
+            />
             ) : (
-            <ManualCreatorTab folders={folders} selectedFolderId={selectedFolderId} onQuestionCreated={handleSingleQuestionCreated} onQuestionsGenerated={handleQuestionsGenerated} onNotify={onNotify} isLoading={isLoading} setIsLoading={setIsLoading} />
+            <ManualCreatorTab 
+                folders={folders} 
+                availableFolders={availableFolders}
+                onQuestionCreated={handleSingleQuestionCreated} 
+                onQuestionsGenerated={handleQuestionsGenerated} 
+                onNotify={onNotify} 
+                isLoading={isLoading} 
+                setIsLoading={setIsLoading} 
+            />
             )}
         </div>
       </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { databases, APPWRITE_CONFIG } from '../lib/appwrite';
+import { databases, APPWRITE_CONFIG, account } from '../lib/appwrite';
 
 interface ProfileSettingsProps {
   onNotify: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
@@ -13,6 +13,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
   
   // Không dùng state avatarUrl để upload nữa, chỉ hiển thị
   const [displayAvatar, setDisplayAvatar] = useState('');
+
+  // Password Change State
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [loadingPass, setLoadingPass] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -45,6 +50,29 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChangePassword = async () => {
+      if (!newPassword || newPassword.length < 8) {
+          onNotify("Mật khẩu mới phải có ít nhất 8 ký tự.", "warning");
+          return;
+      }
+      if (!oldPassword) {
+          onNotify("Vui lòng nhập mật khẩu hiện tại.", "warning");
+          return;
+      }
+
+      setLoadingPass(true);
+      try {
+          await account.updatePassword(newPassword, oldPassword);
+          onNotify("Đổi mật khẩu thành công!", "success");
+          setOldPassword('');
+          setNewPassword('');
+      } catch (err: any) {
+          onNotify(err.message || "Lỗi đổi mật khẩu. Kiểm tra lại mật khẩu cũ.", "error");
+      } finally {
+          setLoadingPass(false);
+      }
   };
 
   return (
@@ -103,6 +131,30 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
                     <div className="pt-2 flex justify-end">
                         <button onClick={handleUpdateProfile} disabled={loading} className="bg-[#14452F] text-white px-8 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-[#0F3624] transition-all disabled:opacity-50">
                             {loading ? <i className="fas fa-circle-notch fa-spin"></i> : 'Lưu thay đổi'}
+                        </button>
+                    </div>
+                </div>
+             </section>
+
+             <section className="bg-white p-8 chamfer-lg border border-slate-200 shadow-sm relative overflow-hidden">
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-6 flex items-center gap-2">
+                    <i className="fas fa-lock text-slate-400"></i> Đổi mật khẩu
+                </h3>
+                
+                <div className="space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mật khẩu hiện tại</label>
+                            <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 chamfer-sm font-bold text-slate-800 outline-none focus:border-red-500 transition-all" placeholder="••••••••" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mật khẩu mới</label>
+                            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 chamfer-sm font-bold text-slate-800 outline-none focus:border-green-500 transition-all" placeholder="Tối thiểu 8 ký tự" />
+                        </div>
+                    </div>
+                    <div className="pt-2 flex justify-end">
+                        <button onClick={handleChangePassword} disabled={loadingPass} className="bg-white border-2 border-slate-200 text-slate-600 px-8 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:border-[#14452F] hover:text-[#14452F] transition-all disabled:opacity-50">
+                            {loadingPass ? <i className="fas fa-circle-notch fa-spin"></i> : 'Cập nhật mật khẩu'}
                         </button>
                     </div>
                 </div>

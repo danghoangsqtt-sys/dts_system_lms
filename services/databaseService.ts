@@ -65,6 +65,9 @@ const mapDbQuestionToLocal = (db: any): Question => {
   const folderId = meta.folderId || mapped.folder_id || 'default';
   const image = meta.image || mapped.image;
   const isPublicBank = meta.isPublicBank ?? mapped.is_public_bank;
+  
+  // NEW: Lấy tên thư mục từ metadata, fallback về "Mặc định"
+  const folder = meta.folder || 'Mặc định';
 
   return {
     id: mapped.id,
@@ -80,6 +83,7 @@ const mapDbQuestionToLocal = (db: any): Question => {
     bloomLevel,
     category,
     folderId,
+    folder, // Text-based folder
     image,
     isPublicBank
   };
@@ -98,6 +102,7 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => {
     bloomLevel: q.bloomLevel,
     category: q.category || 'General',
     folderId: q.folderId === 'default' ? null : q.folderId,
+    folder: q.folder || 'Mặc định', // NEW: Save text-based folder
     image: q.image,
     isPublicBank: !!q.isPublicBank
   };
@@ -131,21 +136,78 @@ const mapDbExamToLocal = (db: any): Exam => {
   };
 };
 
+/**
+ * GRACEFUL DEGRADATION HANDLER
+ * Xử lý lỗi Appwrite 400 (thiếu Index/Attribute) một cách an toàn.
+ * - Nếu lỗi 400: Log warning thân thiện, trả về mảng rỗng để bảo vệ UI.
+ * - Nếu lỗi khác: Log error, trả về mảng rỗng (không throw để tránh crash React Tree).
+ */
+const handleFetchError = (context: string, error: any): [] => {
+  if (error?.code === 400) {
+    console.warn(
+      `⚠️ Appwrite Database Warning [${context}]: Thiếu Index hoặc Attribute cho collection. ` +
+      `Trả về mảng rỗng để bảo vệ UI. Chi tiết: ${error?.message || 'N/A'}`
+    );
+  } else {
+    console.error(`❌ Database Error [${context}]:`, error);
+  }
+  return [];
+};
+
+// --- AUTH ADMIN SERVICE (REST API) ---
+/**
+ * Tạo tài khoản Auth (User Identity) trực tiếp bằng Server API Key.
+ * Bỏ qua giới hạn "Pre-registration" của Client SDK.
+ */
+export const createAuthUserAsAdmin = async (email: string, password: string, name: string) => {
+    const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT;
+    const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
+    const secretKey = import.meta.env.VITE_APPWRITE_SERVER_API_KEY;
+
+    if (!secretKey) throw new Error("Hệ thống chưa cấu hình Server API Key để tạo tài khoản.");
+
+    // Gọi Appwrite REST API: /users
+    const response = await fetch(`${endpoint}/users`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Appwrite-Project': projectId,
+            'X-Appwrite-Key': secretKey,
+        },
+        body: JSON.stringify({ 
+            userId: 'unique()', 
+            email, 
+            password, 
+            name 
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Không thể tạo tài khoản Auth (REST Error)");
+    }
+    
+    // Trả về JSON chứa thông tin user ($id, status, etc...)
+    return await response.json();
+};
+
 // --- SERVICE ---
 
 export const databaseService = {
+  // =====================
   // --- QUESTIONS ---
-  async fetchQuestions(userId?: string) {
+  // =====================
+  async fetchQuestions(userId?: string): Promise<Question[]> {
     try {
+        const queries = [Query.orderDesc('$createdAt'), Query.limit(100)];
         const response = await databases.listDocuments(
             APPWRITE_CONFIG.dbId,
             APPWRITE_CONFIG.collections.questions,
-            [Query.orderDesc('$createdAt'), Query.limit(100)]
+            queries
         );
         return response.documents.map(mapDbQuestionToLocal);
-    } catch (error) {
-        console.error("Lỗi tải câu hỏi:", error);
-        return [];
+    } catch (error: any) {
+        return handleFetchError('fetchQuestions', error);
     }
   },
 
@@ -199,9 +261,10 @@ export const databaseService = {
     }
   },
 
+  // =====================
   // --- EXAMS ---
-  // Giữ nguyên logic Exam vì config đã là JSON string
-  async fetchExams(userId?: string) {
+  // =====================
+  async fetchExams(userId?: string): Promise<Exam[]> {
     try {
         const response = await databases.listDocuments(
             APPWRITE_CONFIG.dbId,
@@ -209,8 +272,8 @@ export const databaseService = {
             [Query.orderDesc('$createdAt')]
         );
         return response.documents.map(mapDbExamToLocal);
-    } catch (error) {
-        return [];
+    } catch (error: any) {
+        return handleFetchError('fetchExams', error);
     }
   },
 
@@ -243,20 +306,108 @@ export const databaseService = {
     }
   },
 
+  // =====================
+  // --- CLASSES ---
+  // =====================
+
+  /**
+   * Fetch danh sách lớp học.
+   * @param teacherId - Nếu có, chỉ lấy lớp do teacher này phụ trách.
+   *                    Nếu không truyền, lấy toàn bộ lớp.
+   * @returns Mảng document lớp học (Appwrite raw), hoặc [] nếu lỗi 400.
+   */
+  async fetchClasses(teacherId?: string): Promise<any[]> {
+    try {
+        const queries: any[] = [];
+        if (teacherId) {
+            queries.push(Query.equal('teacher_id', [teacherId]));
+        }
+        queries.push(Query.orderDesc('$createdAt'));
+        queries.push(Query.limit(100));
+
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.classes,
+            queries
+        );
+        return response.documents.map(mapDoc);
+    } catch (error: any) {
+        return handleFetchError('fetchClasses', error);
+    }
+  },
+
+  // =====================
+  // --- STUDENTS ---
+  // =====================
+  
+  async fetchStudentsByClass(classId: string) {
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.profiles,
+            [Query.equal('role', 'student'), Query.equal('class_id', classId)]
+        );
+        return response.documents.map((doc: any) => ({
+            id: doc.$id,
+            fullName: doc.full_name,
+            email: doc.email,
+            role: doc.role,
+            status: doc.status,
+            classId: doc.class_id,
+            avatarUrl: doc.avatar_url
+        }));
+    } catch (error) {
+        console.error("Lỗi tải danh sách học viên:", error);
+        return [];
+    }
+  },
+
+  // =====================
   // --- LECTURES & FILES ---
+  // =====================
+
+  async fetchLecturesByClass(classId: string): Promise<any[]> {
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.lectures,
+            [
+                Query.equal('shared_with_class_id', [classId]),
+                Query.orderDesc('$createdAt'),
+                Query.limit(100)
+            ]
+        );
+        return response.documents.map(mapDoc);
+    } catch (error: any) {
+        return handleFetchError('fetchLecturesByClass', error);
+    }
+  },
+
+  async fetchLecturesByCreator(creatorId: string): Promise<any[]> {
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.lectures,
+            [
+                Query.equal('creator_id', [creatorId]),
+                Query.orderDesc('$createdAt'),
+                Query.limit(100)
+            ]
+        );
+        return response.documents.map(mapDoc);
+    } catch (error: any) {
+        return handleFetchError('fetchLecturesByCreator', error);
+    }
+  },
+
   async uploadLecture(file: File, title: string, classId: string, creatorId: string) {
       try {
-          // 1. Upload file vào bucket 'lectures'
           const uploaded = await storage.createFile(
               APPWRITE_CONFIG.buckets.lectures,
               ID.unique(),
               file
           );
-
-          // 2. Lấy View URL
           const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, uploaded.$id);
-
-          // 3. Lưu thông tin vào Database
           const doc = await databases.createDocument(
               APPWRITE_CONFIG.dbId,
               APPWRITE_CONFIG.collections.lectures,

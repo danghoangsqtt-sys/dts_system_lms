@@ -229,7 +229,8 @@ export interface Question {
   explanation?: string;
   bloomLevel?: string;
   category?: string;
-  folderId?: string;
+  folderId?: string; // Keeping for compatibility, but 'folder' string is preferred now
+  folder?: string;   // NEW: Text-based folder name stored in metadata
   image?: string;
 
   // DB Reflection (SnakeCase) - kept for compatibility when mapping raw DB responses

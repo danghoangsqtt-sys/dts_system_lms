@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { extractTextFromPDF } from '../../services/documentProcessor';
 import { generateQuestionsByAI } from '../../services/geminiService';
@@ -6,7 +5,7 @@ import { Question, QuestionType, QuestionFolder } from '../../types';
 
 interface AIGeneratorTabProps {
   folders: QuestionFolder[];
-  selectedFolderId: string;
+  availableFolders: string[]; // NEW prop
   onQuestionsGenerated: (questions: Question[]) => void;
   onNotify: (message: string, type: any) => void;
   isLoading: boolean;
@@ -16,8 +15,7 @@ interface AIGeneratorTabProps {
 const BLOOM_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
 
 const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({ 
-  folders, 
-  selectedFolderId, 
+  availableFolders, 
   onQuestionsGenerated, 
   onNotify, 
   isLoading, 
@@ -28,6 +26,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
     'Nhận biết': 0, 'Thông hiểu': 0, 'Vận dụng': 0, 'Phân tích': 0, 'Đánh giá': 0, 'Sáng tạo': 0
   });
   const [qType, setQType] = useState<QuestionType>(QuestionType.MULTIPLE_CHOICE);
+  const [targetFolder, setTargetFolder] = useState<string>('Mặc định');
 
   const totalQuestions = Object.values(bloomCounts).reduce((a, b) => a + b, 0);
 
@@ -42,6 +41,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
   const handleGenerate = async () => {
     if (totalQuestions === 0) return onNotify("Hãy chọn ít nhất 1 mức độ Bloom", "warning");
     if (!pdfFile) return onNotify("Hãy tải lên tệp tài liệu nguồn", "warning");
+    if (!targetFolder.trim()) return onNotify("Vui lòng nhập tên thư mục lưu trữ", "warning");
 
     setIsLoading(true);
     try {
@@ -64,7 +64,8 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
       const processed = rawQuestions.map(q => ({
         ...q, 
         id: Math.random().toString(36).substr(2, 9), 
-        folderId: selectedFolderId, 
+        folderId: 'default',
+        folder: targetFolder, // Assign selected folder
         createdAt: Date.now(),
         type: normalizeType(q.type)
       } as Question));
@@ -86,6 +87,24 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
           <p className="font-bold text-slate-600">{pdfFile ? pdfFile.name : "Kéo thả hoặc chọn giáo trình PDF để AI biên soạn đề"}</p>
           <p className="text-[10px] text-slate-400 mt-2 font-black uppercase tracking-widest">Hỗ trợ tối đa 15,000 ký tự tri thức</p>
        </div>
+
+        {/* Folder Selection */}
+       <div className="space-y-2">
+          <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1">Lưu vào thư mục</label>
+          <input 
+            list="folderOptionsAI"
+            value={targetFolder} 
+            onChange={e => setTargetFolder(e.target.value)} 
+            placeholder="Chọn hoặc nhập tên thư mục..."
+            className="w-full p-4 bg-[#E8F5E9]/50 border border-[#14452F]/20 chamfer-sm font-bold text-slate-700 focus:bg-white outline-none transition-all"
+          />
+          <datalist id="folderOptionsAI">
+            {availableFolders.map(f => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
+       </div>
+
        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">

@@ -7,6 +7,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import Chatbot from "./components/Chatbot";
 import QuestionGenerator from "./components/QuestionGenerator/index";
 import Documents from "./components/Documents";
@@ -833,8 +834,9 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <AuthProvider>
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <Router>
       <AppContent />
+      <SpeedInsights />
     </Router>
   </AuthProvider>
 );
