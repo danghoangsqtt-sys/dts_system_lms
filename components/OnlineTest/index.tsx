@@ -22,16 +22,51 @@ export default function OnlineTestManager({ user }: { user: any }) {
     const [examQuestions, setExamQuestions] = useState<any[]>([]);
     const [examAnswerData, setExamAnswerData] = useState<any>(null);
 
+    // Giao lớp
+    const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+    const [targetClassId, setTargetClassId] = useState<string>('');
+
     useEffect(() => {
-        const loadExams = async () => {
-            if (!user) return;
+        const fetchData = async () => {
             try {
-                const data = await databaseService.fetchExams(user.id, user.role);
-                setExams(data);
-            } catch (err) { console.error('Lỗi tải đề thi:', err); }
-            finally { setLoading(false); }
+                // 1. Tải danh sách Lớp học (phục vụ cho Admin/Giáo viên giao đề)
+                if (user?.role !== 'student') {
+                    const classes = await databaseService.fetchClasses();
+                    setAvailableClasses(classes);
+                }
+
+                // 2. Tải toàn bộ Đề thi
+                const allExams = await databaseService.fetchExams();
+                
+                // 3. THUẬT TOÁN LỌC PHÂN QUYỀN
+                let filteredExams = allExams;
+                
+                if (user?.role === 'student') {
+                    // HỌC VIÊN: Chỉ thấy đề Đã Xuất Bản VÀ Giao đúng cho lớp của mình
+                    filteredExams = allExams.filter((e: any) => 
+                        e.status === 'published' && 
+                        e.class_id === user?.class_id && 
+                        e.exam_purpose !== 'self_study'
+                    );
+                } else if (user?.role === 'teacher') {
+                    // GIÁO VIÊN: Chỉ thấy đề của mình tạo
+                    filteredExams = allExams.filter((e: any) => 
+                        e.creator_id === user.id && 
+                        e.exam_purpose !== 'self_study'
+                    );
+                } else {
+                    // ADMIN: Thấy tất cả (trừ đề tự học)
+                    filteredExams = allExams.filter((e: any) => e.exam_purpose !== 'self_study');
+                }
+                
+                setExams(filteredExams);
+            } catch (error) {
+                console.error("Lỗi tải dữ liệu Online Test:", error);
+            } finally {
+                setLoading(false);
+            }
         };
-        loadExams();
+        if (user) fetchData();
     }, [user]);
 
     const isTeacherOrAdmin = user?.role === 'admin' || user?.role === 'teacher';
@@ -44,6 +79,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
         setShuffleQ(exam.shuffle_questions !== false);
         setShuffleO(exam.shuffle_options !== false);
         setExamStatus(exam.status || 'draft');
+        setTargetClassId(exam.class_id || '');
         setConfigModalOpen(true);
     };
 
@@ -56,7 +92,8 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 exam_password: examPassword,
                 shuffle_questions: shuffleQ,
                 shuffle_options: shuffleO,
-                status: examStatus
+                status: examStatus,
+                class_id: targetClassId || null
             };
             await databaseService.updateExam(selectedExam.id, payload);
             setExams(prev => prev.map(e => e.id === selectedExam.id ? { ...e, ...payload } : e));
@@ -128,7 +165,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 <div className="flex-1 flex items-center justify-center text-slate-400">
                     <i className="fas fa-circle-notch fa-spin text-2xl mr-3"></i> Đang tải...
                 </div>
-            ) : exams.filter(e => e.exam_purpose !== 'self_study').length === 0 ? (
+            ) : exams.length === 0 ? (
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex flex-col items-center justify-center text-center">
                     <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-3xl mb-4">
                         <i className="fas fa-file-signature"></i>
@@ -142,7 +179,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {exams.filter(e => e.exam_purpose !== 'self_study').map(exam => (
+                    {exams.map(exam => (
                         <div key={exam.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col cursor-pointer hover:shadow-md transition-all" onClick={() => {
                             if (user?.role === 'student') {
                                 handleTakeExam(exam);
@@ -196,6 +233,21 @@ export default function OnlineTestManager({ user }: { user: any }) {
                                 <label className="flex items-center gap-2 cursor-pointer font-bold text-sm text-slate-700">
                                     <input type="checkbox" checked={shuffleO} onChange={e => setShuffleO(e.target.checked)} className="w-4 h-4 text-[#14452F]" /> Đảo đáp án
                                 </label>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Giao cho Lớp</label>
+                                <select 
+                                    value={targetClassId} 
+                                    onChange={e => setTargetClassId(e.target.value)}
+                                    title="Chọn lớp để giao đề thi"
+                                    className="w-full border-2 border-slate-200 p-2 rounded outline-none focus:border-[#14452F] font-bold text-sm"
+                                >
+                                    <option value="">-- Chưa giao lớp --</option>
+                                    {availableClasses.map((cls: any) => (
+                                        <option key={cls.$id || cls.id} value={cls.$id || cls.id}>{cls.name}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div>

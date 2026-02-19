@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Question, QuestionType, QuestionFolder } from '../../types';
+import ImportModal from '../QuestionBank/ImportModal';
 
 interface ManualCreatorTabProps {
   folders: QuestionFolder[]; // Kept for interface compatibility but we use `availableFolders` string array
@@ -33,6 +34,30 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
   });
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const handleImportSuccess = (importedQuestions: any[]) => {
+      if (importedQuestions.length > 0) {
+          importedQuestions.forEach((q: any) => {
+              const newQuestion: Question = {
+                  id: Math.random().toString(36).substr(2, 9),
+                  content: q.content || '',
+                  type: QuestionType.MULTIPLE_CHOICE,
+                  options: (q.options || []).map((o: string) => o.replace(/^[A-D]\.\s*/, '')),
+                  correctAnswer: q.correctAnswer || '',
+                  explanation: q.explanation || '',
+                  bloomLevel: 'Nhận biết',
+                  category: 'An toàn điện',
+                  folder: manualQ.folder,
+                  folderId: 'default',
+                  createdAt: Date.now(),
+              } as Question;
+              onQuestionCreated(newQuestion);
+          });
+          setIsImportModalOpen(false);
+          onNotify(`Đã import thành công ${importedQuestions.length} câu hỏi!`, 'success');
+      }
+  };
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -107,29 +132,38 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in">
-       {/* Folder Selection Input */}
-       <div className="mt-4 mb-4">
-          <label className="block text-xs font-bold text-[#14452F] uppercase mb-2">
-              <i className="fas fa-folder-open mr-2"></i> Thư mục lưu trữ
-          </label>
-          <input 
-            type="text"
-            list="manual-folder-options"
-            value={manualQ.folder} 
-            onChange={e => setManualQ({...manualQ, folder: e.target.value})} 
-            placeholder="Chọn hoặc tự gõ tên thư mục mới..."
-            className="w-full bg-white border-2 border-slate-200 text-slate-700 px-4 py-3 chamfer-sm font-medium focus:border-[#14452F] focus:ring-0 outline-none transition-all"
-          />
-          <datalist id="manual-folder-options">
-            {availableFolders && availableFolders.map((folderName, idx) => (
-              <option key={`manual-folder-${idx}`} value={folderName} />
-            ))}
-          </datalist>
+       {/* Khu vực Nhập Thư Mục và Nút Import */}
+       <div className="mt-4 mb-4 flex flex-col md:flex-row gap-4 items-end border-b-2 border-slate-100 pb-6">
+          <div className="flex-1 w-full">
+              <label className="block text-xs font-bold text-[#14452F] uppercase mb-2">
+                  <i className="fas fa-folder-open mr-2"></i> Thư mục lưu trữ
+              </label>
+              <input 
+                type="text"
+                list="manual-folder-options"
+                value={manualQ.folder} 
+                onChange={e => setManualQ({...manualQ, folder: e.target.value})} 
+                placeholder="Chọn hoặc tự gõ tên thư mục mới..."
+                className="w-full bg-white border-2 border-slate-200 text-slate-700 px-4 py-3 chamfer-sm font-medium focus:border-[#14452F] focus:ring-0 outline-none transition-all"
+              />
+              <datalist id="manual-folder-options">
+                {availableFolders && availableFolders.map((folderName, idx) => (
+                  <option key={`manual-folder-${idx}`} value={folderName} />
+                ))}
+              </datalist>
+          </div>
+          
+          <button 
+              onClick={() => setIsImportModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded chamfer-sm font-bold text-sm flex items-center gap-2 transition-all shadow-sm h-[52px]"
+          >
+              <i className="fas fa-file-word text-lg"></i> Import từ Word/Text
+          </button>
        </div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="space-y-4">
-             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nội dung câu hỏi & Ảnh minh họa</label>
+             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nội dung câu hỏi &amp; Ảnh minh họa</label>
              <div className="relative group">
                 <textarea 
                    value={manualQ.content} 
@@ -149,6 +183,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                         </div>
                         <button 
                             onClick={handleRemoveImage}
+                            title="Xóa ảnh"
                             className="w-8 h-8 chamfer-sm bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center mr-2 shadow-sm"
                         >
                             <i className="fas fa-trash-alt text-[10px]"></i>
@@ -170,6 +205,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    <select 
                       value={manualQ.bloomLevel} 
                       onChange={e => setManualQ({...manualQ, bloomLevel: e.target.value})} 
+                      title="Chọn mức độ Bloom"
                       className="w-full p-4 bg-gray-50 border border-gray-200 chamfer-sm font-bold text-slate-700 focus:bg-white outline-none transition-all"
                    >
                       {BLOOM_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
@@ -186,7 +222,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
 
              {manualQ.type === QuestionType.MULTIPLE_CHOICE ? (
                 <div className="grid grid-cols-1 gap-3 bg-[#E8F5E9]/30 p-6 chamfer-lg border border-[#14452F]/10">
-                   <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1 mb-1 block">Phương án & Đáp án đúng</label>
+                   <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1 mb-1 block">Phương án &amp; Đáp án đúng</label>
                    <div className="grid grid-cols-1 gap-2">
                       {manualQ.options.map((opt, i) => (
                         <div key={i} className="flex gap-2">
@@ -203,6 +239,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                           />
                           <button 
                             type="button"
+                            title={`Chọn đáp án ${String.fromCharCode(65+i)}`}
                             onClick={() => setSelectedIndex(i)} 
                             className={`w-12 h-12 chamfer-sm flex items-center justify-center transition-all ${selectedIndex === i ? 'bg-green-600 text-white shadow-lg' : 'bg-white text-gray-300 border border-gray-100 hover:border-green-300'}`}
                           >
@@ -240,10 +277,19 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                disabled={isLoading}
                className="w-full py-5 bg-[#14452F] text-white chamfer-md font-black uppercase text-xs tracking-[0.2em] shadow-2xl hover:bg-[#0F3624] transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
              >
-                <i className="fas fa-plus-circle"></i> THÊM VÀO GIỎ CÂU HỎI
+                {isLoading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-plus-circle"></i>} 
+                THÊM VÀO GIỎ CÂU HỎI
              </button>
           </div>
        </div>
+
+       {/* MODAL IMPORT ĐƯỢC CHÈN AN TOÀN TRƯỚC THẺ ĐÓNG GỐC */}
+       {isImportModalOpen && (
+           <ImportModal 
+               onClose={() => setIsImportModalOpen(false)} 
+               onImport={handleImportSuccess} 
+           />
+       )}
     </div>
   );
 };
