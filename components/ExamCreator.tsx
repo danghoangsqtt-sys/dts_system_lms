@@ -47,7 +47,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
                 const response = await databases.listDocuments(
                     APPWRITE_CONFIG.dbId,
                     APPWRITE_CONFIG.collections.classes,
-                    [Query.equal('teacher_id', user.id)]
+                    [Query.equal('teacher_id', [user.id])]
                 );
                 setClasses(response.documents.map((d: any) => ({ id: d.$id, name: d.name })));
             } catch (err) {

@@ -24,13 +24,14 @@ const TeacherStudents: React.FC<TeacherStudentsProps> = ({ onNotify }) => {
     const [formData, setFormData] = useState({ fullName: '', classId: '' });
 
     const fetchData = async () => {
+        if (!user?.id) return;
         setLoading(true);
         try {
             // 1. Get Teacher's Classes
             const classRes = await databases.listDocuments(
                 APPWRITE_CONFIG.dbId,
                 APPWRITE_CONFIG.collections.classes,
-                [Query.equal('teacher_id', user?.id || '')]
+                [Query.equal('teacher_id', [user.id])]
             );
             
             const classList = classRes.documents.map(c => ({ id: c.$id, name: c.name }));

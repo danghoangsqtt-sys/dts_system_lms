@@ -28,13 +28,14 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
     const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
     const fetchData = async () => {
+        if (!user?.id) return;
         try {
             if (isTeacher) {
                 // Fetch classes
                 const classRes = await databases.listDocuments(
                     APPWRITE_CONFIG.dbId, 
                     APPWRITE_CONFIG.collections.classes,
-                    [Query.equal('teacher_id', user?.id || '')]
+                    [Query.equal('teacher_id', [user.id])]
                 );
                 const classMap = new Map(classRes.documents.map(c => [c.$id, c.name]));
                 setClasses(classRes.documents.map(c => ({ id: c.$id, name: c.name })));
@@ -44,7 +45,7 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
                     APPWRITE_CONFIG.dbId,
                     APPWRITE_CONFIG.collections.lectures,
                     [
-                        Query.equal('creator_id', user?.id || ''),
+                        Query.equal('creator_id', [user.id]),
                         Query.orderDesc('$createdAt')
                     ]
                 );
@@ -64,7 +65,7 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
                     APPWRITE_CONFIG.dbId,
                     APPWRITE_CONFIG.collections.lectures,
                     [
-                        Query.equal('shared_with_class_id', user.classId),
+                        Query.equal('shared_with_class_id', [user.classId]),
                         Query.orderDesc('$createdAt')
                     ]
                 );
@@ -86,6 +87,7 @@ const LectureManager: React.FC<LectureManagerProps> = ({ onNotify }) => {
                 })));
             }
         } catch (err: any) {
+            console.error('LectureManager fetchData error:', err);
             onNotify(err.message, 'error');
         }
     };

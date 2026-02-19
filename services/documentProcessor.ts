@@ -126,8 +126,9 @@ export const embedChunks = async (
 
   for (let i = 0; i < textChunks.length; i++) {
     try {
+      // Use current GA model: gemini-embedding-001
       const response = await ai.models.embedContent({
-        model: "text-embedding-004",
+        model: "gemini-embedding-001",
         contents: [{ parts: [{ text: textChunks[i] }] }]
       });
       const embedding = response.embeddings?.[0];
@@ -140,11 +141,11 @@ export const embedChunks = async (
         });
       }
     } catch (e: any) {
-      console.warn(`Error embedding chunk ${i}:`, e.message);
+      console.error(`Embedding failed for chunk ${i}:`, e.message);
       // Rate limit handling
       if (e.toString().includes('429')) {
         await new Promise(r => setTimeout(r, 4500));
-        i--;
+        i--; // Retry this chunk in next iteration
         continue;
       }
     }
@@ -176,8 +177,9 @@ export const findRelevantChunks = async (
   const ai = new GoogleGenAI({ apiKey });
 
   try {
+    // Use current GA model: gemini-embedding-001
     const response = await ai.models.embedContent({
-      model: "text-embedding-004",
+      model: "gemini-embedding-001",
       contents: [{ parts: [{ text: query }] }]
     });
     const queryVector = response.embeddings?.[0]?.values;
@@ -188,7 +190,7 @@ export const findRelevantChunks = async (
       .sort((a, b) => b.score - a.score)
       .slice(0, topK)
       .map(item => item.chunk);
-  } catch (e) {
+  } catch (e: any) {
     console.error("RAG Lookup Error:", e);
     // Fallback to simple keyword search
     const lowerQuery = query.toLowerCase();

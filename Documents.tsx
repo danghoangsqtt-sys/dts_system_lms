@@ -20,6 +20,7 @@ interface DocumentsProps {
 
 const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScreen: () => void }> = ({ url, isFullScreen, onToggleFullScreen }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const renderTaskRef = useRef<any>(null);
     const [pdf, setPdf] = useState<any>(null);
     const [pageNum, setPageNum] = useState(1);
     const [total, setTotal] = useState(0);
@@ -35,25 +36,59 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
             setPageNum(1); 
             setLoading(false);
         }).catch(() => setLoading(false));
+
+        return () => {
+            loadingTask.destroy();
+        };
     }, [url]);
 
     useEffect(() => {
         if (!pdf || !canvasRef.current) return;
+
+        // Cancel any in-progress render to avoid "Cannot use the same canvas during multiple render() operations"
+        if (renderTaskRef.current) {
+            renderTaskRef.current.cancel();
+            renderTaskRef.current = null;
+        }
         
+        let cancelled = false;
+
         pdf.getPage(pageNum).then((page: any) => {
-            const viewport = page.getViewport({ scale });
-            const canvas = canvasRef.current!;
+            if (cancelled || !canvasRef.current) return;
+
+            const viewport = page.getViewport({ scale: scale });
+            const canvas = canvasRef.current;
             const context = canvas.getContext('2d');
             
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
+            context!.clearRect(0, 0, canvas.width, canvas.height);
+
             const renderContext = {
                 canvasContext: context,
                 viewport: viewport
             };
-            page.render(renderContext);
+            const task = page.render(renderContext);
+            renderTaskRef.current = task;
+
+            task.promise.then(() => {
+                renderTaskRef.current = null;
+            }).catch((err: any) => {
+                if (err?.name !== 'RenderingCancelledException') {
+                    console.error('PDF render error:', err);
+                }
+                renderTaskRef.current = null;
+            });
         });
+
+        return () => {
+            cancelled = true;
+            if (renderTaskRef.current) {
+                renderTaskRef.current.cancel();
+                renderTaskRef.current = null;
+            }
+        };
     }, [pdf, pageNum, scale]);
 
     return (
