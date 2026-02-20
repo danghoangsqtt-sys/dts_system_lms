@@ -96,6 +96,7 @@ npm run build
   - 📄 `geminiService.ts` - *Tích hợp AI tạo câu hỏi từ văn bản*
 - 📁 **types/** - *Khai báo các Interfaces/Types cho TypeScript*
 - 📁 **utils/** - *Các hàm hỗ trợ tiện ích (Engine chấm điểm, Format thời gian)*
+
 🛡️ BẢO MẬT & QUYỀN RIÊNG TƯ
 Toàn bộ Document Security (Quyền Read/Write) được kiểm soát chặt chẽ trên Appwrite.
 
