@@ -359,9 +359,43 @@ export const databaseService = {
     try {
         const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.profiles, [Query.equal('role', 'student'), Query.equal('class_id', classId)]);
         return response.documents.map((doc: any) => ({
-            id: doc.$id, fullName: doc.full_name, email: doc.email, role: doc.role, status: doc.status, classId: doc.class_id, avatarUrl: doc.avatar_url
+            id: doc.$id, 
+            fullName: doc.full_name, 
+            email: doc.email, 
+            role: doc.role, 
+            status: doc.status?.toLowerCase(), // Chuẩn hóa về chữ thường để UI dễ check
+            classId: doc.class_id, 
+            avatarUrl: doc.avatar_url,
+            created_by: doc.created_by // Bổ sung lấy tên Giáo viên tạo
         }));
     } catch (error) { return []; }
+  },
+
+  // --- TẠO HỌC VIÊN TRỰC TIẾP BỞI GIÁO VIÊN ---
+  async createStudentByTeacher(studentData: { email: string; password: string; fullName: string; classId: string; teacherName: string }) {
+      try {
+          const authUser = await createAuthUserAsAdmin(studentData.email, studentData.password, studentData.fullName);
+          const userId = authUser.$id || authUser.id; 
+          
+          const profilePayload = {
+              email: studentData.email,
+              full_name: studentData.fullName,
+              role: 'student',
+              status: 'approved',
+              class_id: studentData.classId,
+              avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(studentData.fullName)}&background=random`,
+              created_by: studentData.teacherName // LƯU VẾT GIÁO VIÊN TẠO
+          };
+          
+          const doc = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.profiles, userId, profilePayload);
+          
+          return {
+              id: doc.$id, fullName: doc.full_name, email: doc.email, role: doc.role, status: doc.status, classId: doc.class_id, avatarUrl: doc.avatar_url, created_by: doc.created_by
+          };
+      } catch (error) {
+          console.error("Lỗi tạo học viên bởi Giáo viên:", error);
+          throw error;
+      }
   },
 
   async fetchLectures(userId: string, role: string, classId?: string): Promise<any[]> {

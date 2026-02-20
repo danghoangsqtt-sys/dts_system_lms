@@ -320,8 +320,16 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                                         </div>
                                     </td>
                                     <td className="py-3 text-xs font-medium text-slate-500 font-mono">{s.email}</td>
-                                    <td className="py-3 text-center">
-                                        <span className={`text-[8px] font-black px-2 py-1 chamfer-sm uppercase ${s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{s.status === 'active' ? 'Active' : 'Pending'}</span>
+                                    <td className="p-4 align-middle text-center">
+                                        {['approved', 'active', 'ACTIVE', 'APPROVED'].includes(s.status) ? (
+                                            <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-md text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                                ACTIVE
+                                            </span>
+                                        ) : (
+                                            <span className="px-2.5 py-1 bg-orange-100 text-orange-700 rounded-md text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                                PENDING
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="py-3 text-right">
                                         <button 

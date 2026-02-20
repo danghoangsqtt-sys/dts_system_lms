@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Login: React.FC = () => {
@@ -10,6 +10,15 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState('');
+
+  // Lấy danh sách lớp để học viên chọn khi đăng ký
+  useEffect(() => {
+      import('../services/databaseService').then(module => {
+          module.databaseService.fetchClasses().then(res => setClasses(res || []));
+      });
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +27,7 @@ const Login: React.FC = () => {
     setSuccessMsg(null);
 
     if (password.length < 8) {
-        setError("Mật khẩu phải có ít nhất 8 ký tự (Yêu cầu Appwrite).");
+        setError("Mật khẩu phải có từ 8 ký tự trở lên!");
         setLoading(false);
         return;
     }
@@ -28,8 +37,8 @@ const Login: React.FC = () => {
         await login(email, password);
       } else {
         if (!fullName.trim()) throw new Error("Vui lòng nhập họ và tên.");
-        await register(email, password, fullName);
-        setSuccessMsg("Tài khoản đã được tạo và đăng nhập thành công.");
+        await register(email, password, fullName, selectedClassId || undefined);
+        setSuccessMsg("Tài khoản đã được tạo. Vui lòng chờ Admin phê duyệt để kích hoạt.");
       }
     } catch (err: any) {
       setError(err.message || 'Lỗi xác thực.');
@@ -123,6 +132,26 @@ const Login: React.FC = () => {
               </div>
               {mode === 'SIGNUP' && <p className="text-[9px] text-slate-500 italic pl-1">* Tối thiểu 8 ký tự</p>}
             </div>
+
+            {mode === 'SIGNUP' && (
+                <div className="space-y-1 animate-slide-up">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Đăng ký vào Lớp học</label>
+                    <select 
+                        title="Chọn lớp học"
+                        value={selectedClassId} 
+                        onChange={(e) => setSelectedClassId(e.target.value)}
+                        className="w-full p-3 bg-[#020617]/60 border border-slate-700 rounded-lg text-white text-sm font-bold outline-none focus:border-emerald-500 transition-all"
+                    >
+                        <option value="">-- Tôi là học viên tự do (Chờ phân lớp) --</option>
+                        {classes.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                    <p className="text-[9px] text-amber-400/80 italic pl-1">
+                        * Tài khoản đăng ký mới sẽ được Admin phê duyệt trước khi kích hoạt.
+                    </p>
+                </div>
+            )}
 
             <button 
               type="submit" disabled={loading}

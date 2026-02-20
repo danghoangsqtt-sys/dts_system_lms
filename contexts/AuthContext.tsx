@@ -6,7 +6,7 @@ interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
-  register: (email: string, pass: string, name: string) => Promise<void>;
+  register: (email: string, pass: string, name: string, classId?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await checkSession();
   };
 
-  const register = async (email: string, pass: string, name: string) => {
+  const register = async (email: string, pass: string, name: string, classId?: string) => {
     // 1. Tạo tài khoản Appwrite Identity
     const userId = ID.unique();
     await account.create(userId, email, pass, name);
@@ -88,8 +88,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 3. Logic "Hồ sơ chờ" (Pre-registration)
     // Kiểm tra xem đã có profile nào được tạo trước bởi Admin với email này chưa
     let finalRole = 'student';
-    let finalClassId = null;
-    let finalStatus = 'active';
+    let finalClassId = classId || null;
+    let finalStatus = 'pending'; // Tự đăng ký thì phải chờ Admin duyệt
 
     try {
       const existingProfiles = await databases.listDocuments(
