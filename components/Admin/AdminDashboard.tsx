@@ -84,7 +84,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify }) => {
           } />
           <Route path="teachers" element={<TeacherManager onNotify={onNotify} />} />
           <Route path="classes" element={<ClassManager onNotify={onNotify} />} />
-          <Route path="students" element={<StudentApproval onNotify={onNotify} />} />
+          <Route path="students" element={<StudentApproval />} />
         </Routes>
       </div>
     </div>
