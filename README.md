@@ -61,26 +61,25 @@ Cài đặt các gói thư viện (Dependencies):
 
 Bash
 npm install
-Thiết lập biến môi trường:
+## Thiết lập biến môi trường:
+- Tạo file .env ở thư mục gốc của dự án.
+- Thêm các thông số kết nối đến Appwrite:
 
-Tạo file .env ở thư mục gốc của dự án.
+## Đoạn mã
+- VITE_APPWRITE_ENDPOINT=[https://cloud.appwrite.io/v1](https://cloud.appwrite.io/v1)
+- VITE_APPWRITE_PROJECT_ID=your_project_id
+- VITE_APPWRITE_SERVER_API_KEY=your_secret_api_key
 
-Thêm các thông số kết nối đến Appwrite:
-
-Đoạn mã
-VITE_APPWRITE_ENDPOINT=[https://cloud.appwrite.io/v1](https://cloud.appwrite.io/v1)
-VITE_APPWRITE_PROJECT_ID=your_project_id
-VITE_APPWRITE_SERVER_API_KEY=your_secret_api_key
-Khởi chạy môi trường phát triển:
-
+## Khởi chạy môi trường phát triển:
 Bash
 npm run dev
 Hệ thống sẽ chạy tại địa chỉ http://localhost:3000 (hoặc cổng được cấu hình).
 
-Build cho môi trường Production:
+## Build cho môi trường Production:
 
 Bash
 npm run build
+
 ## 📂 CẤU TRÚC THƯ MỤC CHÍNH
 
 - 📁 **components/** - *Chứa toàn bộ các Component giao diện chính*
