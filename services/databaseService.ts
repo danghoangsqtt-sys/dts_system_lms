@@ -3,9 +3,6 @@ import { Question, Exam, QuestionType } from '../types';
 
 // --- HELPERS ---
 
-/**
- * Helper: Parse JSON string một cách an toàn.
- */
 const unpackMetadata = (jsonString: string | null | undefined): any => {
   if (!jsonString) return {};
   try {
@@ -16,9 +13,6 @@ const unpackMetadata = (jsonString: string | null | undefined): any => {
   }
 };
 
-/**
- * Helper: Làm sạch nội dung câu hỏi.
- */
 const cleanContent = (rawContent: any): string => {
   let contentVal = rawContent;
   try {
@@ -36,14 +30,10 @@ const mapDoc = (doc: any) => ({
     createdAt: doc.$createdAt ? new Date(doc.$createdAt).getTime() : Date.now()
 });
 
-/**
- * MAPPER: DB -> LOCAL (Question)
- */
 const mapDbQuestionToLocal = (db: any): Question => {
   const mapped = mapDoc(db);
   const meta = unpackMetadata(db.metadata);
 
-  // Folder Logic: Priority: Metadata -> DB Column -> Default
   const folder = meta.folder || mapped.folder_id || 'Mặc định';
 
   return {
@@ -52,23 +42,18 @@ const mapDbQuestionToLocal = (db: any): Question => {
     type: mapped.type as QuestionType,
     creatorId: mapped.creator_id,
     createdAt: mapped.createdAt,
-    
-    // Packed fields
     options: meta.options || mapped.options || [],
     correctAnswer: meta.correctAnswer || mapped.correct_answer,
     explanation: meta.explanation || mapped.explanation,
     bloomLevel: meta.bloomLevel || mapped.bloom_level,
     category: meta.category || mapped.category,
-    folderId: folder, // We use folderId prop to store the folder name string for compatibility
-    folder: folder,   // Explicit field
+    folderId: folder,
+    folder: folder,
     image: meta.image || mapped.image,
-    isPublicBank: mapped.is_public_bank // Use the DB column directly
+    isPublicBank: mapped.is_public_bank
   };
 };
 
-/**
- * MAPPER: LOCAL -> DB (Question)
- */
 const mapLocalQuestionToDb = (q: Question, userId: string): any => {
   const folderName = q.folder || q.folderId || 'Mặc định';
 
@@ -78,17 +63,16 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => {
     explanation: q.explanation,
     bloomLevel: q.bloomLevel,
     category: q.category || 'General',
-    folder: folderName, // SAVE FOLDER NAME HERE
-    folderId: folderName, // Keep synced
+    folder: folderName,
+    folderId: folderName,
     image: q.image,
-    // Note: isPublicBank is handled via separate column in saveQuestion
   };
 
   return {
     content: typeof q.content === 'object' ? JSON.stringify(q.content) : q.content,
     type: q.type,
     creator_id: userId,
-    bloom_level: q.bloomLevel, // Sync basic fields to columns for Indexing if needed
+    bloom_level: q.bloomLevel,
     category: q.category,
     metadata: JSON.stringify(metaObject)
   };
@@ -113,7 +97,7 @@ const mapDbExamToLocal = (db: any): any => {
     creatorId: db.creator_id,
     createdAt: db.$createdAt,
     
-    // BÍ QUYẾT: Ưu tiên đọc mọi cài đặt từ chuỗi nén configObj, nếu không có mới tìm ngoài db
+    // Đọc mọi cài đặt từ chuỗi nén configObj
     start_time: configObj.start_time || db.start_time,
     end_time: configObj.end_time || db.end_time,
     exam_password: configObj.exam_password || db.exam_password,
@@ -122,7 +106,7 @@ const mapDbExamToLocal = (db: any): any => {
     status: configObj.status || db.status || 'draft',
     exam_purpose: configObj.exam_purpose || db.exam_purpose || 'both',
     class_id: configObj.class_id || db.class_id || '',
-    max_attempts: configObj.max_attempts || 1 // Mặc định là 1 lần thi
+    max_attempts: configObj.max_attempts || 1
   };
 };
 
@@ -135,7 +119,6 @@ const handleFetchError = (context: string, error: any): [] => {
   return [];
 };
 
-// --- AUTH ADMIN SERVICE (REST API) ---
 const getAdminHeaders = () => {
     const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
     const secretKey = import.meta.env.VITE_APPWRITE_SERVER_API_KEY;
@@ -177,8 +160,6 @@ export const deleteAuthUserAsAdmin = async (userId: string) => {
     }
 };
 
-// --- SERVICE ---
-
 export const databaseService = {
   async removeStudentFromClass(profileId: string) {
       try {
@@ -197,22 +178,9 @@ export const databaseService = {
       }
   },
 
-  // --- UPDATED: Fetch Questions with Global Visibility ---
   async fetchQuestions(userId: string, role: string = 'student'): Promise<Question[]> {
     try {
-        const queries = [Query.orderDesc('$createdAt'), Query.limit(100)];
-        
-        if (role === 'student') {
-             // Students only see public/global questions
-             queries.push(Query.equal('is_public_bank', true));
-        } else {
-             // Admin & Teacher see their own + global
-             queries.push(Query.or([
-                 Query.equal('creator_id', userId),
-                 Query.equal('is_public_bank', true)
-             ]));
-        }
-
+        const queries = [Query.orderDesc('$createdAt'), Query.limit(500)];
         const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, queries);
         return response.documents.map(mapDbQuestionToLocal);
     } catch (error: any) {
@@ -220,7 +188,6 @@ export const databaseService = {
     }
   },
 
-  // --- UPDATED: Save Question with Auto Global for Admin ---
   async saveQuestion(q: Question, userId: string, role: string = 'student') {
     const isGlobal = role === 'admin';
     const payload = {
@@ -280,33 +247,19 @@ export const databaseService = {
     }
   },
 
-  // --- UPDATED: Fetch Exams with Global Visibility ---
+  // --- SỬA LỖI TẠI ĐÂY: Kéo toàn bộ đề thi về Frontend xử lý lọc ---
   async fetchExams(userId: string, role: string = 'student'): Promise<Exam[]> {
     try {
-        const queries = [Query.orderDesc('$createdAt')];
-        
-        if (role === 'student') {
-             // Học viên chỉ thấy đề đã được giao cho lớp (có class_id)
-             queries.push(Query.isNotNull('class_id'));
-        } else {
-             queries.push(Query.or([
-                 Query.equal('creator_id', userId),
-                 Query.equal('is_global', true)
-             ]));
-        }
-
+        const queries = [
+            Query.orderDesc('$createdAt'),
+            Query.limit(500)
+        ];
+        // Tuyệt đối không thêm Query.isNotNull hay Query.or ở đây để tránh crash index
         const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, queries);
         return response.documents.map(mapDbExamToLocal);
     } catch (error: any) {
-        // Fallback for when is_global is not yet in schema: just return own or public
-        if (error?.message?.includes('is_global')) {
-             console.warn("Schema missing 'is_global' on Exams. Falling back to creator_id.");
-             try {
-                const fallbackRes = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, [Query.equal('creator_id', userId)]);
-                return fallbackRes.documents.map(mapDbExamToLocal);
-             } catch(e) { return []; }
-        }
-        return handleFetchError('fetchExams', error);
+        console.error("Lỗi tải đề thi:", error);
+        return [];
     }
   },
 
@@ -324,7 +277,6 @@ export const databaseService = {
           let configObj: any = {};
           try { configObj = JSON.parse(doc.config || '{}'); } catch(e) {}
 
-          // Nhồi toàn bộ mọi cài đặt vào cục configObj
           if (updates.folder !== undefined) configObj.folder = updates.folder;
           if (updates.start_time !== undefined) configObj.start_time = updates.start_time;
           if (updates.end_time !== undefined) configObj.end_time = updates.end_time;
@@ -336,7 +288,6 @@ export const databaseService = {
           if (updates.exam_purpose !== undefined) configObj.exam_purpose = updates.exam_purpose;
           if (updates.max_attempts !== undefined) configObj.max_attempts = updates.max_attempts;
 
-          // Chỉ gửi duy nhất cột config lên Appwrite (Đảm bảo 100% lưu thành công mà không cần tạo thêm cột mới trong DB)
           const dbPayload = {
               config: JSON.stringify(configObj)
           };
@@ -348,25 +299,30 @@ export const databaseService = {
       }
   },
 
-  // --- UPDATED: Save Exam with Auto Global for Admin ---
+  // --- SỬA LỖI TẠI ĐÂY: Bỏ các cột có thể không tồn tại trên Appwrite ---
   async saveExam(e: Exam, userId: string, role: string = 'student') {
-    const isGlobal = role === 'admin';
     try {
-        const configToSave = e.config || {};
+        const configToSave = {
+            ...(e.config || {}),
+            exam_purpose: e.exam_purpose || e.config?.exam_purpose || 'both',
+            status: e.status || e.config?.status || 'draft',
+            class_id: e.sharedWithClassId || e.config?.class_id || null,
+            max_attempts: e.config?.max_attempts || 1,
+            folder: e.folder || 'Mặc định'
+        };
 
         const payload = {
             title: e.title,
             type: e.type || 'REGULAR',
             question_ids: e.questionIds || [],
-            config: JSON.stringify(configToSave),
-            class_id: e.sharedWithClassId || e.config?.assignedClassId || null,
-            creator_id: userId,
-            is_global: isGlobal,
-            folder: e.folder || 'Mặc định'
+            config: JSON.stringify(configToSave), // Nhồi tất cả thông số vào chuỗi config
+            creator_id: userId
+            // Không gửi class_id và is_global ra ngoài payload để tránh lỗi Document Schema
         };
         const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, ID.unique(), payload);
         return mapDbExamToLocal(created);
     } catch (error) {
+        console.error("Lỗi lưu đề thi:", error);
         throw error;
     }
   },
@@ -375,18 +331,9 @@ export const databaseService = {
     for (const e of exams) { await this.saveExam(e, userId, role); }
   },
 
-  // --- NEW: Fetch User Documents with Global Visibility ---
   async fetchUserDocuments(userId: string, role: string) {
     try {
         const queries = [Query.orderDesc('$createdAt')];
-        if (role === 'student') {
-            queries.push(Query.equal('is_global', true));
-        } else {
-            queries.push(Query.or([
-                Query.equal('user_id', userId),
-                Query.equal('is_global', true)
-            ]));
-        }
         const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.user_documents, queries);
         return response.documents;
     } catch (error: any) {
@@ -424,9 +371,7 @@ export const databaseService = {
     } catch (error: any) { return handleFetchError('fetchLecturesByClass', error); }
   },
 
-  // --- UPDATED: Upload Lecture with Auto Global for Admin ---
   async uploadLecture(file: File, title: string, classId: string, creatorId: string, role: string) {
-      const isGlobal = role === 'admin';
       try {
           const uploaded = await storage.createFile(APPWRITE_CONFIG.buckets.lectures, ID.unique(), file);
           const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, uploaded.$id);
@@ -435,9 +380,7 @@ export const databaseService = {
               title, 
               file_url: fileUrl, 
               creator_id: creatorId, 
-              shared_with_class_id: classId,
-              // Assuming lectures also have an is_global concept or we assume admins share via specific classes
-              // If schema supports is_global, add: is_global: isGlobal 
+              shared_with_class_id: classId
           });
           return mapDoc(doc);
       } catch (error) { throw error; }
@@ -489,9 +432,6 @@ export const submitExamResult = async (resultData: any) => {
     } catch (error) { console.error("Lỗi lưu điểm thi:", error); throw error; }
 };
 
-/**
- * Lấy tất cả kết quả thi của một đề thi (Dùng cho Thống kê GV/Admin)
- */
 export const fetchExamResults = async (examId: string): Promise<any[]> => {
     try {
         const response = await databases.listDocuments(
@@ -514,9 +454,6 @@ export const fetchExamResults = async (examId: string): Promise<any[]> => {
     }
 };
 
-/**
- * Đếm số lần thi của một học viên đối với một đề thi (Kiểm soát số lần thi)
- */
 export const fetchStudentAttemptCount = async (examId: string, studentId: string): Promise<number> => {
     try {
         const response = await databases.listDocuments(
@@ -525,7 +462,7 @@ export const fetchStudentAttemptCount = async (examId: string, studentId: string
             [
                 Query.equal('exam_id', examId),
                 Query.equal('student_id', studentId),
-                Query.limit(1) // Chỉ cần count, lấy tối thiểu
+                Query.limit(1)
             ]
         );
         return response.total;

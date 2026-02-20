@@ -39,10 +39,11 @@ export default function SelfStudyManager({ user }: { user: any }) {
                 const studyExams = allExams.filter((e: any) => e.exam_purpose === 'self_study' || e.exam_purpose === 'both');
                 
                 let filteredExams = [];
-                if (user.role === 'student') {
-                    // HỌC VIÊN: Thấy toàn bộ đề Ôn tập đã xuất bản (KHÔNG CẦN CHECK LỚP)
+                const role = user.role?.toLowerCase();
+                
+                if (role === 'student') {
                     filteredExams = studyExams.filter((e: any) => e.status === 'published');
-                } else if (user.role === 'teacher') {
+                } else if (role === 'teacher') {
                     filteredExams = studyExams.filter((e: any) => e.creatorId === user.id || e.creator_id === user.id);
                 } else {
                     filteredExams = studyExams;
@@ -97,16 +98,37 @@ export default function SelfStudyManager({ user }: { user: any }) {
         }
 
         try {
-            const sourceQuestions = await databaseService.fetchQuestions(); 
-            const examFolderQuestions = sourceQuestions.filter((q: any) => {
-                const meta = typeof q.metadata === 'string' ? JSON.parse(q.metadata) : (q.metadata || {});
-                return meta.folder === exam.folder;
-            });
-            const { examQuestions, answerData } = generateExamPaper(examFolderQuestions, examFolderQuestions.length, "ONLINE_TEST");
+            const sourceQuestions = await databaseService.fetchQuestions(user.id, user.role); 
+            
+            // BỘ LỌC CÂU HỎI THÔNG MINH
+            let examQuestionsToUse = [];
+            if (exam.questionIds && exam.questionIds.length > 0) {
+                // Ưu tiên 1: Đề thi có danh sách câu hỏi cụ thể (Sinh ra từ ExamCreator)
+                examQuestionsToUse = sourceQuestions.filter(q => exam.questionIds.includes(q.id));
+            } else {
+                // Ưu tiên 2: Kéo toàn bộ câu hỏi trong Folder (Dùng cho đề thi động)
+                examQuestionsToUse = sourceQuestions.filter(q => q.folder === exam.folder || q.folderId === exam.folder);
+            }
+            
+            if (examQuestionsToUse.length === 0) {
+                alert("Đề thi này chưa có câu hỏi nào (Hoặc Admin chưa cấp quyền Read bảng Questions trong Appwrite).");
+                return;
+            }
+
+            // Sinh đề thi (Trộn đáp án, trộn câu hỏi)
+            const { examQuestions, answerData } = generateExamPaper(
+                examQuestionsToUse, 
+                examQuestionsToUse.length, 
+                "ONLINE_TEST"
+            );
+            
             setExamQuestions(examQuestions);
             setExamAnswerData(answerData);
             setActiveExamData(exam);
-        } catch (error) { alert("Lỗi tải đề ôn tập!"); }
+        } catch (error) { 
+            console.error("Lỗi lấy câu hỏi:", error);
+            alert("Lỗi tải cấu trúc đề thi!"); 
+        }
     };
 
     if (activeExamData) {

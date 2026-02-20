@@ -57,13 +57,26 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 
                 let filteredExams = [];
                 const role = user.role?.toLowerCase();
+                const studentClassId = user.class_id || user.classId || '';
 
                 if (role === 'student') {
-                    // Học viên: Thấy đề đã Xuất bản + Đúng Lớp
-                    const studentClassId = user.class_id || user.classId || '';
-                    filteredExams = onlineExams.filter((e: any) => 
-                        e.status === 'published' && e.class_id === studentClassId
-                    );
+                    if (!studentClassId) {
+                        filteredExams = [];
+                        console.warn("HỌC VIÊN NÀY CHƯA CÓ CLASS_ID TRONG TÀI KHOẢN!");
+                    } else {
+                        filteredExams = onlineExams.filter((e: any) => {
+                            const isPublished = e.status === 'published';
+                            const isSameClass = e.class_id === studentClassId;
+                            
+                            // Log X-Quang để kiểm tra sự cố
+                            if (!isPublished || !isSameClass) {
+                                console.log(`🚫 Đề "${e.title}" BỊ ẨN. Lý do:`, 
+                                    !isPublished ? 'Chưa xuất bản.' : `Lệch Lớp (Đề gán Lớp ID: "${e.class_id}" KHÁC VỚI Học viên Lớp ID: "${studentClassId}")`
+                                );
+                            }
+                            return isPublished && isSameClass;
+                        });
+                    }
                 } else if (role === 'teacher') {
                     // Giáo viên: Thấy đề do mình tạo (Bảo toàn cả 2 kiểu biến)
                     filteredExams = onlineExams.filter((e: any) => e.creatorId === user.id || e.creator_id === user.id);
@@ -152,21 +165,36 @@ export default function OnlineTestManager({ user }: { user: any }) {
         }
 
         try {
-            // 4. Lấy câu hỏi gốc
-            const sourceQuestions = await databaseService.fetchQuestions(user.id, user.role);
-            const examFolderQuestions = sourceQuestions.filter((q: any) => {
-                const meta = typeof q.metadata === 'string' ? JSON.parse(q.metadata) : (q.metadata || {});
-                return meta.folder === exam.folder;
-            });
+            const sourceQuestions = await databaseService.fetchQuestions(user.id, user.role); 
+            
+            // BỘ LỌC CÂU HỎI THÔNG MINH
+            let examQuestionsToUse = [];
+            if (exam.questionIds && exam.questionIds.length > 0) {
+                // Ưu tiên 1: Đề thi có danh sách câu hỏi cụ thể (Sinh ra từ ExamCreator)
+                examQuestionsToUse = sourceQuestions.filter(q => exam.questionIds.includes(q.id));
+            } else {
+                // Ưu tiên 2: Kéo toàn bộ câu hỏi trong Folder (Dùng cho đề thi động)
+                examQuestionsToUse = sourceQuestions.filter(q => q.folder === exam.folder || q.folderId === exam.folder);
+            }
+            
+            if (examQuestionsToUse.length === 0) {
+                alert("Đề thi này chưa có câu hỏi nào (Hoặc Admin chưa cấp quyền Read bảng Questions trong Appwrite).");
+                return;
+            }
 
-            // 5. Trộn đề
-            const { examQuestions: eqs, answerData } = generateExamPaper(examFolderQuestions, examFolderQuestions.length, "ONLINE_TEST");
-
-            setExamQuestions(eqs);
+            // Sinh đề thi (Trộn đáp án, trộn câu hỏi)
+            const { examQuestions, answerData } = generateExamPaper(
+                examQuestionsToUse, 
+                examQuestionsToUse.length, 
+                "ONLINE_TEST"
+            );
+            
+            setExamQuestions(examQuestions);
             setExamAnswerData(answerData);
             setActiveExamData(exam);
-        } catch (error) {
-            alert("Lỗi khi tải đề thi!");
+        } catch (error) { 
+            console.error("Lỗi lấy câu hỏi:", error);
+            alert("Lỗi tải cấu trúc đề thi!"); 
         }
     };
 
@@ -202,11 +230,14 @@ export default function OnlineTestManager({ user }: { user: any }) {
                         <i className="fas fa-file-signature"></i>
                     </div>
                     <h3 className="text-xl font-bold text-slate-800 mb-2">Chưa có bài kiểm tra nào</h3>
-                    <p className="text-slate-500">
-                        {isTeacherOrAdmin
-                            ? 'Hãy giao đề thi cho lớp từ Ngân hàng Đề để bài thi xuất hiện tại đây.'
-                            : 'Khi Giảng viên giao đề thi cho lớp, bài kiểm tra sẽ xuất hiện tại đây.'}
-                    </p>
+                    {user?.role?.toLowerCase() === 'student' && !(user.class_id || user.classId) ? (
+                        <p className="text-red-600 font-bold bg-red-50 p-3 rounded-lg border border-red-200">
+                            <i className="fas fa-exclamation-triangle mr-2"></i> 
+                            Tài khoản của bạn chưa được Admin phân vào Lớp học nào. Vui lòng liên hệ Admin!
+                        </p>
+                    ) : (
+                        <p className="text-slate-500">Khi Giảng viên giao đề thi cho lớp của bạn, bài kiểm tra sẽ xuất hiện tại đây.</p>
+                    )}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
