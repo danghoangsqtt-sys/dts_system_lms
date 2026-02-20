@@ -43,15 +43,15 @@ export default function LectureManager(props: any) {
     }, [user]);
 
     useEffect(() => {
-        if (activeItem && activeCourse && user?.id) {
+        if (activeItem?.id && activeCourse?.id && user?.id) {
             const savedNote = localStorage.getItem(`lms_note_${activeCourse.id}_${activeItem.id}_${user.id}`);
             setNote(savedNote || '');
         }
-    }, [activeItem, activeCourse, user?.id]);
+    }, [activeItem?.id, activeCourse?.id, user?.id]);
 
     const handleSaveNote = (text: string) => {
         setNote(text);
-        if (activeItem && activeCourse && user?.id) {
+        if (activeItem?.id && activeCourse?.id && user?.id) {
             localStorage.setItem(`lms_note_${activeCourse.id}_${activeItem.id}_${user.id}`, text);
         }
     };
@@ -59,19 +59,18 @@ export default function LectureManager(props: any) {
     const getEmbedUrl = (url: string) => {
         if (!url) return '';
         
-        // 1. Xử lý Link Youtube
+        // 1. Youtube
         if (url.includes('youtube.com') || url.includes('youtu.be')) {
             const videoId = url.includes('v=') ? url.split('v=')[1]?.split('&')[0] : url.split('/').pop();
             return `https://www.youtube.com/embed/${videoId}`;
         }
         
-        // 2. Xử lý Link Google Slides / Docs / Sheets (Tuyệt chiêu ép hiển thị tĩnh)
+        // 2. Google Slides / Docs / Sheets (Tuyệt chiêu ép hiển thị tĩnh)
         if (url.includes('docs.google.com')) {
-            // Đổi đuôi /edit hoặc /view thành /embed và thêm ?rm=minimal để giấu toàn bộ Menu/Thanh công cụ
             return url.replace(/\/(edit|view).*$/, '/embed?rm=minimal');
         }
 
-        // 3. Xử lý Link Google Drive (File PPTX/PDF gốc chưa qua Google Slides)
+        // 3. Google Drive PPTX/PDF gốc
         if (url.includes('drive.google.com')) {
             try {
                 let fileId = '';
@@ -94,7 +93,7 @@ export default function LectureManager(props: any) {
         return url;
     };
 
-    // --- CÁC HÀM XỬ LÝ DỮ LIỆU ---
+    // --- CÁC HÀM XỬ LÝ DỮ LIỆU CHỐNG CRASH ---
     const handleAddModule = () => {
         if (!activeCourse) return;
         const currentModules = activeCourse.config?.modules || [];
@@ -110,7 +109,7 @@ export default function LectureManager(props: any) {
             m.id === moduleId ? { ...m, items: [...(m.items || []), newItem] } : m
         );
         setActiveCourse({ ...activeCourse, config: { ...activeCourse.config, modules: updatedModules } });
-        setActiveItem(newItem); // Tự động Focus vào bài mới tạo để GV dán link ngay
+        setActiveItem(newItem);
     };
 
     const handleUpdateItem = (moduleId: string, itemId: string, field: keyof CourseItem, value: string) => {
@@ -118,15 +117,14 @@ export default function LectureManager(props: any) {
         const currentModules = activeCourse.config?.modules || [];
         const updatedModules = currentModules.map(m => {
             if (m.id !== moduleId) return m;
-            return { ...m, items: (m.items || []).map(i => i.id === itemId ? { ...i, [field]: value } : i) };
+            return { ...m, items: (m.items || []).map(i => i?.id === itemId ? { ...i, [field]: value } : i) };
         });
         setActiveCourse({ ...activeCourse, config: { ...activeCourse.config, modules: updatedModules } });
     };
 
-    // Hàm cập nhật Item trực tiếp từ Toolbar (Inline Edit)
     const handleInlineUpdateItem = (field: keyof CourseItem, value: string) => {
-        if (!activeItem || !activeCourse) return;
-        const moduleId = activeCourse.config?.modules?.find(m => m.items?.some(i => i.id === activeItem.id))?.id;
+        if (!activeItem?.id || !activeCourse) return;
+        const moduleId = activeCourse.config?.modules?.find(m => (m.items || []).some(i => i?.id === activeItem.id))?.id;
         if (!moduleId) return;
         
         setActiveItem(prev => prev ? { ...prev, [field]: value } : prev);
@@ -134,13 +132,13 @@ export default function LectureManager(props: any) {
     };
 
     const handleDeleteItemInline = () => {
-        if (!activeItem || !activeCourse) return;
+        if (!activeItem?.id || !activeCourse) return;
         if (!window.confirm("Xóa tài liệu này?")) return;
-        const moduleId = activeCourse.config?.modules?.find(m => m.items?.some(i => i.id === activeItem.id))?.id;
+        const moduleId = activeCourse.config?.modules?.find(m => (m.items || []).some(i => i?.id === activeItem.id))?.id;
         if (!moduleId) return;
         const updatedModules = activeCourse.config.modules.map(m => {
             if (m.id !== moduleId) return m;
-            return { ...m, items: m.items.filter(i => i.id !== activeItem.id) };
+            return { ...m, items: (m.items || []).filter(i => i?.id !== activeItem.id) };
         });
         setActiveCourse({ ...activeCourse, config: { ...activeCourse.config, modules: updatedModules } });
         setActiveItem(null);
@@ -156,7 +154,6 @@ export default function LectureManager(props: any) {
                 return exists ? prev.map(c => c.id === saved.id ? saved : c) : [saved, ...prev];
             });
             alert("Đã lưu Môn học thành công!");
-            // Không thoát viewMode để GV tiếp tục làm việc
         } catch (error) { alert("Lỗi khi lưu!"); }
         finally { setLoading(false); }
     };
@@ -181,7 +178,7 @@ export default function LectureManager(props: any) {
             <div className="h-full flex bg-slate-50 relative">
                 {/* Nút công cụ Góc phải trên */}
                 <div className="absolute top-4 right-6 z-50 flex gap-2">
-                    {user.role !== 'student' && (
+                    {user?.role !== 'student' && (
                         <button onClick={handleSaveCourseDB} className="bg-[#14452F] text-white shadow-md px-4 py-2 rounded-lg font-bold hover:bg-[#0f3523] hover:shadow-lg transition-all">
                             <i className="fas fa-save mr-2"></i> Lưu Xuất Bản
                         </button>
@@ -199,7 +196,7 @@ export default function LectureManager(props: any) {
                                 <h2 className="font-black text-lg leading-tight">{activeCourse.title}</h2>
                                 <p className="text-xs opacity-80 mt-1"><i className="fas fa-book-open mr-1"></i> {(activeCourse.config?.modules || []).length} Chương</p>
                             </div>
-                            {user.role !== 'student' && (
+                            {user?.role !== 'student' && (
                                 <button onClick={() => {
                                     const newTitle = prompt("Đổi tên Môn học:", activeCourse.title);
                                     if (newTitle) setActiveCourse({...activeCourse, title: newTitle});
@@ -209,53 +206,59 @@ export default function LectureManager(props: any) {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar pb-20">
-                        {(activeCourse.config?.modules || []).map((mod, mIdx) => (
-                            <div key={mod.id} className="space-y-1">
-                                <div className="flex justify-between items-center bg-slate-100 px-3 py-2 rounded-md mb-2">
-                                    <h3 className="font-bold text-sm text-slate-800 uppercase tracking-tight truncate flex-1">
-                                        Chương {mIdx + 1}: {mod.title}
-                                    </h3>
-                                    {user.role !== 'student' && (
-                                        <div className="flex gap-2 ml-2">
-                                            <button onClick={() => {
-                                                const newTitle = prompt("Đổi tên Chương:", mod.title);
-                                                if (newTitle) {
-                                                    const newMods = [...activeCourse.config.modules];
-                                                    newMods[mIdx].title = newTitle;
+                        {(activeCourse.config?.modules || []).map((mod, mIdx) => {
+                            if (!mod) return null;
+                            return (
+                                <div key={mod.id} className="space-y-1">
+                                    <div className="flex justify-between items-center bg-slate-100 px-3 py-2 rounded-md mb-2">
+                                        <h3 className="font-bold text-sm text-slate-800 uppercase tracking-tight truncate flex-1">
+                                            Chương {mIdx + 1}: {mod.title}
+                                        </h3>
+                                        {user?.role !== 'student' && (
+                                            <div className="flex gap-2 ml-2">
+                                                <button onClick={() => {
+                                                    const newTitle = prompt("Đổi tên Chương:", mod.title);
+                                                    if (newTitle) {
+                                                        const newMods = [...activeCourse.config.modules];
+                                                        newMods[mIdx].title = newTitle;
+                                                        setActiveCourse({...activeCourse, config: {...activeCourse.config, modules: newMods}});
+                                                    }
+                                                }} className="text-slate-400 hover:text-blue-600"><i className="fas fa-edit"></i></button>
+                                                <button onClick={() => {
+                                                    if(!window.confirm("Xóa toàn bộ chương này?")) return;
+                                                    const newMods = activeCourse.config.modules.filter(m => m.id !== mod.id);
                                                     setActiveCourse({...activeCourse, config: {...activeCourse.config, modules: newMods}});
-                                                }
-                                            }} className="text-slate-400 hover:text-blue-600" title="Đổi tên chương"><i className="fas fa-edit"></i></button>
-                                            <button onClick={() => {
-                                                if(!window.confirm("Xóa toàn bộ chương này?")) return;
-                                                const newMods = activeCourse.config.modules.filter(m => m.id !== mod.id);
-                                                setActiveCourse({...activeCourse, config: {...activeCourse.config, modules: newMods}});
-                                                if(activeItem && mod.items.some(i => i.id === activeItem.id)) setActiveItem(null);
-                                            }} className="text-slate-400 hover:text-red-500" title="Xóa chương"><i className="fas fa-trash"></i></button>
-                                        </div>
-                                    )}
-                                </div>
+                                                    if(activeItem && (mod.items || []).some(i => i?.id === activeItem.id)) setActiveItem(null);
+                                                }} className="text-slate-400 hover:text-red-500"><i className="fas fa-trash"></i></button>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                <div className="pl-2 space-y-1">
-                                    {(mod.items || []).map(item => (
-                                        <div 
-                                            key={item.id} 
-                                            onClick={() => setActiveItem(item)}
-                                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${activeItem?.id === item.id ? 'bg-[#E8F5E9] text-[#14452F] border border-green-200 font-bold shadow-sm' : 'hover:bg-slate-50 text-slate-600 border border-transparent'}`}
-                                        >
-                                            <i className={`text-lg ${item.type === 'VIDEO' ? 'fab fa-youtube text-red-500' : item.type === 'PDF' ? 'fas fa-file-pdf text-red-400' : 'fas fa-file-powerpoint text-orange-500'}`}></i>
-                                            <span className="text-sm truncate flex-1">{item.title}</span>
-                                        </div>
-                                    ))}
-                                    {user.role !== 'student' && (
-                                        <button onClick={() => handleAddItem(mod.id)} className="w-full text-left pl-3 py-2 mt-1 text-xs font-bold text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors">
-                                            <i className="fas fa-plus mr-1"></i> Thêm Bài Học
-                                        </button>
-                                    )}
+                                    <div className="pl-2 space-y-1">
+                                        {(mod.items || []).map(item => {
+                                            if (!item) return null;
+                                            return (
+                                                <div 
+                                                    key={item.id} 
+                                                    onClick={() => setActiveItem(item)}
+                                                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${activeItem?.id === item.id ? 'bg-[#E8F5E9] text-[#14452F] border border-green-200 font-bold shadow-sm' : 'hover:bg-slate-50 text-slate-600 border border-transparent'}`}
+                                                >
+                                                    <i className={`text-lg ${item.type === 'VIDEO' ? 'fab fa-youtube text-red-500' : item.type === 'PDF' ? 'fas fa-file-pdf text-red-400' : 'fas fa-file-powerpoint text-orange-500'}`}></i>
+                                                    <span className="text-sm truncate flex-1">{item.title}</span>
+                                                </div>
+                                            );
+                                        })}
+                                        {user?.role !== 'student' && (
+                                            <button onClick={() => handleAddItem(mod.id)} className="w-full text-left pl-3 py-2 mt-1 text-xs font-bold text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors">
+                                                <i className="fas fa-plus mr-1"></i> Thêm Bài Học
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
 
-                        {user.role !== 'student' && (
+                        {user?.role !== 'student' && (
                             <button onClick={handleAddModule} className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 font-bold rounded-lg hover:border-[#14452F] hover:text-[#14452F] hover:bg-green-50 transition-colors text-sm mt-4">
                                 <i className="fas fa-plus-circle mr-1"></i> THÊM CHƯƠNG MỚI
                             </button>
@@ -267,14 +270,13 @@ export default function LectureManager(props: any) {
                 <div className="flex-1 flex flex-col h-full overflow-hidden">
                     
                     {/* TOOLBAR CHỈNH SỬA NHANH CHO GIÁO VIÊN */}
-                    {user.role !== 'student' && activeItem && (
+                    {user?.role !== 'student' && activeItem && (
                         <div className="bg-white px-5 py-3 border-b border-slate-200 shadow-sm flex items-center gap-3 z-20">
                             <span className="text-xs font-black uppercase text-slate-400 whitespace-nowrap"><i className="fas fa-sliders-h mr-1"></i> Thuộc tính:</span>
                             <select 
                                 value={activeItem.type} 
                                 onChange={e => handleInlineUpdateItem('type', e.target.value)}
                                 className="p-2 border border-slate-200 rounded text-sm font-bold text-slate-700 outline-none focus:border-[#14452F] bg-slate-50"
-                                title="Loại tài liệu"
                             >
                                 <option value="PDF">Tệp PDF</option>
                                 <option value="PPT">Slide PPT</option>
@@ -289,7 +291,7 @@ export default function LectureManager(props: any) {
                             />
                             <input 
                                 type="text" 
-                                value={activeItem.url} 
+                                value={activeItem?.url || ''} 
                                 onChange={e => handleInlineUpdateItem('url', e.target.value)}
                                 placeholder="Dán Link Google Drive hoặc Youtube vào đây để Preview..."
                                 className="flex-1 p-2 border border-slate-200 rounded text-sm text-blue-600 font-mono outline-none focus:border-[#14452F]"
@@ -304,13 +306,13 @@ export default function LectureManager(props: any) {
                     <div className="flex-1 bg-slate-200 p-4 relative z-10">
                         {activeItem ? (
                             <div className="w-full h-full bg-white rounded-xl shadow-inner overflow-hidden border border-slate-300">
-                                {activeItem.url ? (
-                                    <iframe src={getEmbedUrl(activeItem.url)} className="w-full h-full border-0" allow="autoplay" allowFullScreen title={activeItem.title}></iframe>
+                                {activeItem?.url ? (
+                                    <iframe src={getEmbedUrl(activeItem.url)} className="w-full h-full border-0" allow="autoplay" allowFullScreen></iframe>
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
                                         <div className="w-16 h-16 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mb-4"><i className="fas fa-link text-2xl"></i></div>
                                         <p className="font-bold text-lg text-slate-600 mb-1">Chưa có dữ liệu liên kết</p>
-                                        {user.role !== 'student' ? (
+                                        {user?.role !== 'student' ? (
                                             <p className="text-sm">Hãy dán Link vào ô phía trên để nội dung hiển thị ngay tại đây.</p>
                                         ) : (
                                             <p className="text-sm">Giáo viên chưa cập nhật tài liệu cho bài học này.</p>
@@ -367,7 +369,7 @@ export default function LectureManager(props: any) {
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Giao cho Lớp học</label>
-                        <select value={activeCourse.class_id || ''} onChange={e => setActiveCourse({...activeCourse, class_id: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded outline-none focus:border-[#14452F] font-bold" title="Chọn lớp áp dụng">
+                        <select value={activeCourse.class_id || ''} onChange={e => setActiveCourse({...activeCourse, class_id: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded outline-none focus:border-[#14452F] font-bold">
                             <option value="">-- Chọn lớp áp dụng (Bỏ trống nếu dạy chung) --</option>
                             {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
                         </select>
@@ -375,7 +377,7 @@ export default function LectureManager(props: any) {
                     
                     <div className="p-4 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-medium text-sm">
                         <i className="fas fa-info-circle mr-2"></i> 
-                        Để <b>thêm chương</b> và <b>chèn Link tài liệu</b>, hãy bấm "Lưu Cấu Hình", sau đó ra ngoài danh sách và bấm nút <b>VÀO HỌC</b>. Bạn sẽ được phép soạn giáo trình trực tiếp tại đó!
+                        Để <b>thêm chương</b> và <b>chèn Link tài liệu</b>, hãy bấm "Lưu Cấu Hình", sau đó ra ngoài danh sách và bấm nút <b>VÀO HỌC / SOẠN BÀI</b>. Bạn sẽ được phép soạn giáo trình trực tiếp tại đó!
                     </div>
                 </div>
             </div>
@@ -390,7 +392,7 @@ export default function LectureManager(props: any) {
                     <h1 className="text-2xl font-black text-[#14452F] uppercase mb-1">Bài giảng số (Khóa học)</h1>
                     <p className="text-slate-500 text-sm">Nền tảng E-Learning với Live Studio chuyên nghiệp.</p>
                 </div>
-                {user.role !== 'student' && (
+                {user?.role !== 'student' && (
                     <button onClick={() => {
                         setActiveCourse({ title: '', class_id: '', config: { modules: [] } });
                         setViewMode('EDIT');
@@ -421,14 +423,14 @@ export default function LectureManager(props: any) {
                             <div className="p-5 flex-1 flex flex-col">
                                 <div className="flex gap-4 mb-4 text-sm font-bold text-slate-500">
                                     <div className="flex items-center gap-1"><i className="fas fa-folder text-yellow-500"></i> {(course.config?.modules || []).length} Chương</div>
-                                    <div className="flex items-center gap-1"><i className="fas fa-file-alt text-blue-500"></i> {(course.config?.modules || []).reduce((acc, mod) => acc + (mod.items || []).length, 0)} Bài học</div>
+                                    <div className="flex items-center gap-1"><i className="fas fa-file-alt text-blue-500"></i> {(course.config?.modules || []).reduce((acc, mod) => acc + (mod?.items || []).length, 0)} Bài học</div>
                                 </div>
                                 
                                 <div className="mt-auto flex gap-2 pt-4 border-t border-slate-100">
                                     <button onClick={() => { setActiveCourse(course); setActiveItem(null); setViewMode('LEARN'); }} className="flex-1 py-2.5 bg-green-50 text-green-700 font-black rounded-lg hover:bg-green-600 hover:text-white transition-colors border border-green-200 hover:border-green-600 shadow-sm">
                                         <i className="fas fa-play-circle mr-1"></i> VÀO HỌC / SOẠN BÀI
                                     </button>
-                                    {user.role !== 'student' && (
+                                    {user?.role !== 'student' && (
                                         <>
                                             <button onClick={() => { setActiveCourse(course); setViewMode('EDIT'); }} className="px-4 py-2.5 bg-slate-50 text-slate-600 font-black rounded-lg hover:bg-slate-200 transition-colors border border-slate-200" title="Cấu hình thông tin">
                                                 <i className="fas fa-cog"></i>

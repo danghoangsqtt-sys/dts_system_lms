@@ -163,7 +163,7 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
 const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDocumentData, onNotify }) => {
   const { user } = useAuth();
   const [docs, setDocs] = useState<CloudDocumentFile[]>([]);
-  const [cloudDocs, setCloudDocs] = useState<DocumentFile[]>([]); // Lectures from teacher
+
   const [selectedDoc, setSelectedDoc] = useState<DocumentFile | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -200,36 +200,9 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
       fetchUserDocuments();
   }, [user]);
 
-  // Fetch Cloud Lectures (Existing Logic)
-  useEffect(() => {
-    if (user?.role === 'student' && user.classId) {
-      const fetchLectures = async () => {
-        try {
-          const response = await databases.listDocuments(
-            APPWRITE_CONFIG.dbId,
-            APPWRITE_CONFIG.collections.lectures,
-            [Query.equal('shared_with_class_id', user.classId)]
-          );
-          if (response.documents) {
-            setCloudDocs(response.documents.map((l: any) => ({
-              id: `cloud_${l.$id}`,
-              name: l.title,
-              type: 'PDF',
-              url: l.file_url,
-              uploadDate: new Date(l.$createdAt).toLocaleDateString('vi-VN'),
-              isProcessed: true,
-              metadata: { title: l.title }
-            })));
-          }
-        } catch (error) {
-          console.error("Failed to fetch lectures:", error);
-        }
-      }
-      fetchLectures();
-    }
-  }, [user]);
-
-  const allDocs = [...cloudDocs, ...docs];
+  // Đã gỡ bỏ logic fetchLectures để tránh lẫn lộn với Bài giảng số đa phương tiện.
+  // Thư viện RAG giờ đây chỉ tập trung vào các tài liệu PDF được upload riêng cho AI.
+  const allDocs = [...docs];
 
   // TASK 2: Upload File Logic
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
