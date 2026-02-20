@@ -364,29 +364,70 @@ export const databaseService = {
     } catch (error) { return []; }
   },
 
-  async fetchLecturesByClass(classId: string): Promise<any[]> {
+  async fetchLectures(userId: string, role: string, classId?: string): Promise<any[]> {
     try {
-        const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, [Query.equal('shared_with_class_id', [classId]), Query.orderDesc('$createdAt'), Query.limit(100)]);
-        return response.documents.map(mapDoc);
-    } catch (error: any) { return handleFetchError('fetchLecturesByClass', error); }
+        const queries: any[] = [Query.orderDesc('$createdAt'), Query.limit(100)];
+        
+        // Học viên chỉ thấy khóa học của lớp mình
+        if (role === 'student' && classId) {
+            queries.push(Query.equal('shared_with_class_id', [classId]));
+        } 
+        // Giáo viên chỉ thấy khóa do mình tạo (hoặc bạn có thể bỏ dòng này nếu muốn GV thấy hết)
+        else if (role === 'teacher') {
+            queries.push(Query.equal('creator_id', [userId]));
+        }
+        
+        const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, queries);
+        return response.documents.map((doc: any) => {
+            let configObj = { modules: [] };
+            if (doc.config) {
+                try { configObj = typeof doc.config === 'string' ? JSON.parse(doc.config) : doc.config; } catch(e) {}
+            }
+            return {
+                id: doc.$id,
+                title: doc.title,
+                class_id: doc.shared_with_class_id,
+                creator_id: doc.creator_id,
+                createdAt: doc.$createdAt,
+                config: configObj
+            };
+        });
+    } catch (error: any) { 
+        console.error("Lỗi tải Bài giảng:", error);
+        return []; 
+    }
+  },
+async saveCourse(courseData: any, userId: string) {
+      try {
+          const payload = {
+              title: courseData.title,
+              shared_with_class_id: courseData.class_id || null,
+              creator_id: userId,
+              config: JSON.stringify(courseData.config) // Nén toàn bộ cây thư mục vào JSON
+          };
+
+          if (courseData.id) {
+              await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, courseData.id, payload);
+              return { ...courseData, config: payload.config };
+          } else {
+              const doc = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, ID.unique(), payload);
+              return { ...courseData, id: doc.$id, config: payload.config };
+          }
+      } catch (error) {
+          console.error("Lỗi lưu Khóa học:", error);
+          throw error;
+      }
   },
 
-  async uploadLecture(file: File, title: string, classId: string, creatorId: string, role: string) {
+  async deleteCourse(courseId: string) {
       try {
-          const uploaded = await storage.createFile(APPWRITE_CONFIG.buckets.lectures, ID.unique(), file);
-          const fileUrl = storage.getFileView(APPWRITE_CONFIG.buckets.lectures, uploaded.$id);
-          
-          const doc = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, ID.unique(), { 
-              title, 
-              file_url: fileUrl, 
-              creator_id: creatorId, 
-              shared_with_class_id: classId
-          });
-          return mapDoc(doc);
-      } catch (error) { throw error; }
+          await databases.deleteDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.lectures, courseId);
+      } catch (error) {
+          console.error("Lỗi xóa Khóa học:", error);
+          throw error;
+      }
   }
 };
-
 // --- FOLDER MANAGEMENT (Appwrite-based) ---
 
 export const fetchCustomFolders = async (moduleName: 'question' | 'exam'): Promise<string[]> => {
