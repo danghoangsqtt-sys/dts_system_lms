@@ -33,7 +33,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
             return;
         }
         
-        const cId = user.class_id || user.classId;
+        const cId = user.classId || (user as any).class_id;
         if (!cId) {
             setClassNameDisplay('Chưa được biên chế lớp');
             return;
