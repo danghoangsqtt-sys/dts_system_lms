@@ -488,3 +488,49 @@ export const submitExamResult = async (resultData: any) => {
         );
     } catch (error) { console.error("Lỗi lưu điểm thi:", error); throw error; }
 };
+
+/**
+ * Lấy tất cả kết quả thi của một đề thi (Dùng cho Thống kê GV/Admin)
+ */
+export const fetchExamResults = async (examId: string): Promise<any[]> => {
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.examResults,
+            [
+                Query.equal('exam_id', examId),
+                Query.orderDesc('$createdAt'),
+                Query.limit(500)
+            ]
+        );
+        return response.documents.map((doc: any) => ({
+            ...doc,
+            id: doc.$id,
+            createdAt: doc.$createdAt
+        }));
+    } catch (error) {
+        console.error("Lỗi tải kết quả thi:", error);
+        return [];
+    }
+};
+
+/**
+ * Đếm số lần thi của một học viên đối với một đề thi (Kiểm soát số lần thi)
+ */
+export const fetchStudentAttemptCount = async (examId: string, studentId: string): Promise<number> => {
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.examResults,
+            [
+                Query.equal('exam_id', examId),
+                Query.equal('student_id', studentId),
+                Query.limit(1) // Chỉ cần count, lấy tối thiểu
+            ]
+        );
+        return response.total;
+    } catch (error) {
+        console.error("Lỗi đếm số lần thi:", error);
+        return 0;
+    }
+};

@@ -286,25 +286,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
                         </div>
                     </div>
                     
-                    <div className="p-8 bg-purple-50/50 rounded-[2.5rem] border border-purple-100 space-y-6">
-                        <div className="flex items-center gap-3">
-                            <i className="fas fa-users text-purple-600"></i>
-                            <h4 className="text-[11px] font-black text-purple-600 uppercase tracking-[0.2em]">Giao đề thi cho lớp</h4>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn lớp học áp dụng</label>
-                            <select 
-                                disabled={readOnly}
-                                value={examConfig.assignedClassId || ''} 
-                                onChange={e => setExamConfig({...examConfig, assignedClassId: e.target.value})} 
-                                className="w-full p-4 bg-white border border-purple-100 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-purple-500 text-purple-700 disabled:bg-slate-100 disabled:text-slate-500"
-                            >
-                                <option value="">-- Không giao (Chỉ lưu nháp) --</option>
-                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên bài thi</label>

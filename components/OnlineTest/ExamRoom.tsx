@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { submitExamResult } from '../../services/databaseService';
 
 export default function ExamRoom({ exam, questions, answerData, user, onExit }: { exam: any, questions: any[], answerData: any, user: any, onExit: () => void }) {
@@ -7,6 +7,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
     const [answers, setAnswers] = useState<Record<number, string>>({});
     const [flags, setFlags] = useState<Set<number>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const startTimestamp = useRef(Date.now());
 
     // Đồng hồ đếm ngược
     useEffect(() => {
@@ -61,29 +62,39 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
     const submitFinalExam = async () => {
         setIsSubmitting(true);
         let correctCount = 0;
+        const answersDetail: any[] = [];
         
-        // Chấm điểm tự động
+        // Chấm điểm tự động + ghi chi tiết từng câu
         questions.forEach((q, index) => {
             const qNum = index + 1;
             const studentAns = answers[index];
-            const correctAns = answerData[qNum]?.correctLetter; // Lấy từ đáp án đã xáo trộn
+            const correctAns = answerData[qNum]?.correctLetter;
+            const isCorrect = !!(studentAns && correctAns && studentAns.startsWith(correctAns));
             
-            if (studentAns && correctAns && studentAns.startsWith(correctAns)) {
-                correctCount++;
-            }
+            if (isCorrect) correctCount++;
+            
+            answersDetail.push({
+                questionIndex: index,
+                studentAnswer: studentAns || null,
+                correctAnswer: correctAns || null,
+                isCorrect
+            });
         });
 
         const score = (correctCount / questions.length) * 10;
+        const timeSpent = Math.round((Date.now() - startTimestamp.current) / 1000);
 
         try {
             await submitExamResult({
                 exam_id: exam.id,
                 student_id: user.id,
-                student_name: user.name || 'Học viên',
+                student_name: user.fullName || user.name || 'Học viên',
                 score: parseFloat(score.toFixed(2)),
                 correct_answers: correctCount,
                 total_questions: questions.length,
-                answers_data: JSON.stringify(answers)
+                answers_data: JSON.stringify(answers),
+                time_spent: timeSpent,
+                answers_detail: JSON.stringify(answersDetail)
             });
             alert(`Nộp bài thành công! Điểm của bạn: ${score.toFixed(2)}/10`);
             onExit();

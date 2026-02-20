@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { databaseService } from '../../services/databaseService';
+import { databaseService, fetchStudentAttemptCount } from '../../services/databaseService';
 import ExamRoom from './ExamRoom';
+import ExamStatistics from '../ExamStatistics';
 import { generateExamPaper } from '../../utils/examEngine';
 
 export default function OnlineTestManager({ user }: { user: any }) {
@@ -26,6 +27,9 @@ export default function OnlineTestManager({ user }: { user: any }) {
     // Giao lớp
     const [availableClasses, setAvailableClasses] = useState<any[]>([]);
     const [targetClassId, setTargetClassId] = useState<string>('');
+
+    // Thống kê
+    const [statsExam, setStatsExam] = useState<any>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -68,7 +72,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 }
                 
                 // Sắp xếp đề mới nhất lên đầu
-                filteredExams.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                filteredExams.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 setExams(filteredExams);
             } catch (err) { 
                 console.error('Lỗi tải đề thi Online Test:', err); 
@@ -132,15 +136,29 @@ export default function OnlineTestManager({ user }: { user: any }) {
             }
         }
 
+        // 3. Kiểm tra số lần thi
+        if (user?.id && exam.max_attempts && exam.max_attempts < 9999) {
+            try {
+                const attemptCount = await fetchStudentAttemptCount(exam.id, user.id);
+                if (attemptCount >= exam.max_attempts) {
+                    alert(`Bạn đã hết số lần thi cho phép (${exam.max_attempts} lần). Không thể thi thêm.`);
+                    return;
+                }
+            } catch (err) {
+                console.warn('Lỗi kiểm tra số lần thi:', err);
+                // Cho phép thi tiếp nếu API lỗi
+            }
+        }
+
         try {
-            // 3. Lấy câu hỏi gốc
+            // 4. Lấy câu hỏi gốc
             const sourceQuestions = await databaseService.fetchQuestions(user.id, user.role);
             const examFolderQuestions = sourceQuestions.filter((q: any) => {
                 const meta = typeof q.metadata === 'string' ? JSON.parse(q.metadata) : (q.metadata || {});
                 return meta.folder === exam.folder;
             });
 
-            // 4. Trộn đề
+            // 5. Trộn đề
             const { examQuestions: eqs, answerData } = generateExamPaper(examFolderQuestions, examFolderQuestions.length, "ONLINE_TEST");
 
             setExamQuestions(eqs);
@@ -192,21 +210,47 @@ export default function OnlineTestManager({ user }: { user: any }) {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {exams.map(exam => (
-                        <div key={exam.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col cursor-pointer hover:shadow-md transition-all" onClick={() => {
-                            if (user?.role === 'student') {
-                                handleTakeExam(exam);
-                            } else {
-                                openConfigModal(exam);
-                            }
-                        }}>
-                            <h3 className="font-bold text-[#14452F] text-lg mb-2">{exam.title}</h3>
-                            <p className="text-sm text-slate-600 mb-1"><i className="fas fa-clock mr-2"></i> Mở: {exam.start_time ? new Date(exam.start_time).toLocaleString() : 'Tự do'}</p>
-                            <p className="text-sm text-slate-600 mb-3"><i className="fas fa-hourglass-end mr-2"></i> Đóng: {exam.end_time ? new Date(exam.end_time).toLocaleString() : 'Tự do'}</p>
+                        <div key={exam.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col hover:shadow-md transition-all">
+                            <h3 className="font-bold text-[#14452F] text-lg mb-2 cursor-pointer hover:underline" onClick={() => {
+                                if (user?.role === 'student') handleTakeExam(exam);
+                                else openConfigModal(exam);
+                            }}>{exam.title}</h3>
+                            
+                            <div className="space-y-1 mb-3 text-xs text-slate-600">
+                                <p><i className="fas fa-clock mr-2 text-green-500"></i> Mở: {exam.start_time ? new Date(exam.start_time).toLocaleString('vi-VN') : 'Tự do'}</p>
+                                <p><i className="fas fa-hourglass-end mr-2 text-orange-500"></i> Đóng: {exam.end_time ? new Date(exam.end_time).toLocaleString('vi-VN') : 'Tự do'}</p>
+                                {exam.max_attempts && exam.max_attempts < 9999 && (
+                                    <p><i className="fas fa-redo mr-2 text-purple-500"></i> Số lần thi: {exam.max_attempts}</p>
+                                )}
+                                {exam.exam_password && <p><i className="fas fa-lock mr-2 text-red-500"></i> Có mật khẩu</p>}
+                            </div>
+
                             <div className="mt-auto pt-3 border-t border-slate-100 flex justify-between items-center">
                                 <span className={`text-xs font-bold px-2 py-1 rounded ${exam.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
                                     {exam.status === 'published' ? 'Đã Xuất Bản' : 'Bản Nháp'}
                                 </span>
-                                <button className="text-blue-600 text-sm font-bold hover:underline">Cấu hình <i className="fas fa-cog"></i></button>
+                                {isTeacherOrAdmin && (
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setStatsExam(exam); }} 
+                                            className="text-orange-600 text-xs font-bold hover:underline"
+                                            title="Xem thống kê bài thi"
+                                        >
+                                            <i className="fas fa-chart-bar mr-1"></i> Thống kê
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); openConfigModal(exam); }} 
+                                            className="text-blue-600 text-xs font-bold hover:underline"
+                                        >
+                                            <i className="fas fa-cog mr-1"></i> Cấu hình
+                                        </button>
+                                    </div>
+                                )}
+                                {user?.role === 'student' && (
+                                    <button onClick={() => handleTakeExam(exam)} className="bg-[#14452F] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-[#0F3624] transition-all">
+                                        <i className="fas fa-play mr-1"></i> Vào thi
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -292,6 +336,15 @@ export default function OnlineTestManager({ user }: { user: any }) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* MODAL THỐNG KÊ */}
+            {statsExam && (
+                <ExamStatistics 
+                    examId={statsExam.id} 
+                    examTitle={statsExam.title} 
+                    onClose={() => setStatsExam(null)} 
+                />
             )}
         </div>
     );
