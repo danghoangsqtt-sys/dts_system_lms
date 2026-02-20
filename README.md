@@ -54,12 +54,10 @@
 ### Các bước triển khai:
 
 1. **Clone mã nguồn dự án:**
-   ```bash
    git clone <repository-url>
    cd dts_lms_2026
-Cài đặt các gói thư viện (Dependencies):
 
-Bash
+- Cài đặt các gói thư viện (Dependencies):
 npm install
 ## Thiết lập biến môi trường:
 - Tạo file .env ở thư mục gốc của dự án.
@@ -71,13 +69,11 @@ npm install
 - VITE_APPWRITE_SERVER_API_KEY=your_secret_api_key
 
 ## Khởi chạy môi trường phát triển:
-Bash
-npm run dev
-Hệ thống sẽ chạy tại địa chỉ http://localhost:3000 (hoặc cổng được cấu hình).
+- npm run dev
+- Hệ thống sẽ chạy tại địa chỉ http://localhost:3000 (hoặc cổng được cấu hình).
 
 ## Build cho môi trường Production:
 
-Bash
 npm run build
 
 ## 📂 CẤU TRÚC THƯ MỤC CHÍNH
@@ -96,11 +92,9 @@ npm run build
 - 📁 **types/** - *Khai báo các Interfaces/Types cho TypeScript*
 - 📁 **utils/** - *Các hàm hỗ trợ tiện ích (Engine chấm điểm, Format thời gian)*
 
-🛡️ BẢO MẬT & QUYỀN RIÊNG TƯ
-Toàn bộ Document Security (Quyền Read/Write) được kiểm soát chặt chẽ trên Appwrite.
-
-Kiến trúc cơ sở dữ liệu ngăn chặn việc Học viên truy cập chéo đề thi hoặc tài liệu khi chưa được phép hoặc chưa xuất bản.
-
-Lọc hiển thị nội dung Google Drive an toàn (Bypass edit modes).
+## 🛡️ BẢO MẬT & QUYỀN RIÊNG TƯ
+- Toàn bộ Document Security (Quyền Read/Write) được kiểm soát chặt chẽ trên Appwrite.
+- Kiến trúc cơ sở dữ liệu ngăn chặn việc Học viên truy cập chéo đề thi hoặc tài liệu khi chưa được phép hoặc chưa xuất bản.
+- Lọc hiển thị nội dung Google Drive an toàn (Bypass edit modes).
 
 © Bản quyền thuộc về DHSYSTEM. Mọi hành vi sao chép mã nguồn khi chưa được phép đều vi phạm bản quyền.
