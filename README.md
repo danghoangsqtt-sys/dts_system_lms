@@ -81,18 +81,21 @@ Build cho môi trường Production:
 
 Bash
 npm run build
-📂 CẤU TRÚC THƯ MỤC CHÍNH
-Plaintext
-dts_lms_2026/
-├── components/          # Các Component giao diện (Admin, Teacher, Học viên)
-│   ├── OnlineTest/      # Module thi trực tuyến (ExamRoom, Dashboard)
-│   ├── Teacher/         # Module biên soạn Bài giảng số (Live Studio)
-│   └── ...
-├── contexts/            # React Context (Quản lý trạng thái Auth, Theme)
-├── lib/                 # Cấu hình khởi tạo các SDK (Appwrite)
-├── services/            # Các dịch vụ gọi API (Database, Auth, AI)
-├── types/               # Khai báo kiểu dữ liệu TypeScript (Interfaces)
-└── utils/               # Các hàm tiện ích (Format text, xử lý thời gian)
+## 📂 CẤU TRÚC THƯ MỤC CHÍNH
+
+- 📁 **components/** - *Chứa toàn bộ các Component giao diện chính*
+  - 📁 **Admin/** - *Giao diện quản trị viên (Duyệt học viên, Quản lý lớp)*
+  - 📁 **OnlineTest/** - *Phòng thi trực tuyến & Dashboard phân tích điểm số*
+  - 📁 **Teacher/** - *Live Studio biên soạn Bài giảng số và Quản lý lớp học*
+  - 📁 **QuestionGenerator/** - *Hệ thống sinh câu hỏi bằng AI và Thủ công*
+- 📁 **contexts/** - *React Context quản lý trạng thái toàn cục (Auth, Theme)*
+- 📁 **hooks/** - *Các Custom Hooks (Ví dụ: Nhận diện giọng nói)*
+- 📁 **lib/** - *File khởi tạo và cấu hình các SDK (Appwrite Endpoint, Project ID)*
+- 📁 **services/** - *Chịu trách nhiệm giao tiếp Backend*
+  - 📄 `databaseService.ts` - *Xử lý logic CRUD với Appwrite Database*
+  - 📄 `geminiService.ts` - *Tích hợp AI tạo câu hỏi từ văn bản*
+- 📁 **types/** - *Khai báo các Interfaces/Types cho TypeScript*
+- 📁 **utils/** - *Các hàm hỗ trợ tiện ích (Engine chấm điểm, Format thời gian)*
 🛡️ BẢO MẬT & QUYỀN RIÊNG TƯ
 Toàn bộ Document Security (Quyền Read/Write) được kiểm soát chặt chẽ trên Appwrite.
 
