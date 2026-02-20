@@ -195,8 +195,13 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
       createdAt: Date.now(),
       config: {
           ...examConfig,
-          subject: subjectName, // Sync for future edits
-          moduleTerm: moduleName
+          subject: subjectName, 
+          moduleTerm: moduleName,
+          // BẮT BUỘC ĐƯA CÁC TRƯỜNG NÀY VÀO LÕI CONFIG ĐỂ TRÁNH APPWRITE TỪ CHỐI
+          exam_purpose: examPurpose,
+          status: 'draft', // Vừa tạo mặc định là nháp
+          class_id: examConfig.assignedClassId || null,
+          max_attempts: 1
       },
       sharedWithClassId: examConfig.assignedClassId,
       exam_type: examType,

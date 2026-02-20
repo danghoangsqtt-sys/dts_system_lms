@@ -33,7 +33,8 @@ export default function SelfStudyManager({ user }: { user: any }) {
             if (!user) return;
             setLoading(true);
             try {
-                const allExams = await databaseService.fetchExams();
+                // Truyền ID và Role để Backend cho phép lấy dữ liệu
+                const allExams = await databaseService.fetchExams(user.id, user.role);
                 // CHỈ LẤY ĐỀ ÔN TẬP
                 const studyExams = allExams.filter((e: any) => e.exam_purpose === 'self_study' || e.exam_purpose === 'both');
                 

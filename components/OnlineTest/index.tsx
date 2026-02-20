@@ -49,7 +49,8 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 }
 
                 // 2. Tải toàn bộ Đề thi
-                const allExams = await databaseService.fetchExams();
+                // Truyền ID và Role để Backend cho phép lấy dữ liệu
+                const allExams = await databaseService.fetchExams(user.id, user.role);
                 
                 // 3. Lọc đề thi (Chỉ lấy đề có mục đích Kiểm Tra hoặc Cả hai)
                 const onlineExams = allExams.filter((e: any) => e.exam_purpose === 'online_test' || e.exam_purpose === 'both');
