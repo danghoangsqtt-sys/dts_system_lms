@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { databases, APPWRITE_CONFIG, account } from '../lib/appwrite';
+import { databaseService } from '../services/databaseService';
 
 interface ProfileSettingsProps {
   onNotify: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
@@ -13,6 +14,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
   
   // Không dùng state avatarUrl để upload nữa, chỉ hiển thị
   const [displayAvatar, setDisplayAvatar] = useState('');
+  const [classNameDisplay, setClassNameDisplay] = useState('Đang tải...');
 
   // Password Change State
   const [oldPassword, setOldPassword] = useState('');
@@ -23,6 +25,30 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
     if (user) {
       setFullName(user.fullName);
       setDisplayAvatar(user.avatarUrl || '');
+      
+      // Lấy tên lớp học để hiển thị
+      const getClassName = async () => {
+        if (user.role === 'admin' || user.role === 'teacher') {
+            setClassNameDisplay(user.role === 'admin' ? 'Quản trị viên' : 'Giảng Viên');
+            return;
+        }
+        
+        const cId = user.class_id || user.classId;
+        if (!cId) {
+            setClassNameDisplay('Chưa được biên chế lớp');
+            return;
+        }
+        
+        try {
+            const classes = await databaseService.fetchClasses();
+            const myClass = classes.find(c => c.id === cId);
+            setClassNameDisplay(myClass ? myClass.name : `Lớp ID: ${cId}`);
+        } catch (error) {
+            setClassNameDisplay('Không thể tải tên lớp');
+        }
+      };
+      
+      getClassName();
     }
   }, [user]);
 
@@ -106,6 +132,10 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onNotify }) => {
              <div>
                  <h2 className="text-xl font-black text-slate-900 uppercase">{user?.fullName}</h2>
                  <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{user?.role}</p>
+                 <div className="mt-3 bg-slate-100 text-slate-600 px-4 py-2 chamfer-sm text-xs font-black uppercase tracking-widest border border-slate-200">
+                    <i className="fas fa-chalkboard-teacher mr-2 text-blue-500"></i>
+                    {classNameDisplay}
+                 </div>
                  <div className="mt-4 inline-flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1 chamfer-sm text-[10px] font-black uppercase tracking-wider border border-green-100">
                     <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Active Account
                  </div>
