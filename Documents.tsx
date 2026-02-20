@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { DocumentFile, VectorChunk } from '../types';
-import { extractDataFromPDF, chunkText, embedChunks } from '../services/documentProcessor';
+import { DocumentFile, VectorChunk } from './types';
+import { extractDataFromPDF, chunkText, embedChunks } from './services/documentProcessor';
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { databases, storage, APPWRITE_CONFIG, ID, Query } from '../lib/appwrite';
-import { useAuth } from '../contexts/AuthContext';
-import { databaseService } from '../services/databaseService';
+import { databases, storage, APPWRITE_CONFIG, ID, Query } from './lib/appwrite';
+import { useAuth } from './contexts/AuthContext';
+import { databaseService } from './services/databaseService';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 

@@ -267,6 +267,10 @@ export interface Exam {
   question_ids?: string[];
   class_id?: string;
   creator_id?: string;
+  
+  // Runtime / config properties
+  exam_purpose?: string;
+  status?: string;
 }
 
 export interface Lecture {
