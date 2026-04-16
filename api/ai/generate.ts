@@ -3,6 +3,7 @@ import { getNextKey, markKeyExhausted } from '../_lib/keyPool';
 import { checkRateLimit, getClientIP } from '../_lib/rateLimit';
 
 export const maxDuration = 60;
+export const config = { runtime: 'edge' };
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

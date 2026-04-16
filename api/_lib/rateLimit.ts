@@ -12,14 +12,6 @@ const ipMap = new Map<string, RateLimitEntry>();
 const WINDOW_MS = 60_000; // 1 minute
 const MAX_REQUESTS = 10;
 
-// Clean stale entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of ipMap.entries()) {
-    entry.timestamps = entry.timestamps.filter(t => now - t < WINDOW_MS);
-    if (entry.timestamps.length === 0) ipMap.delete(ip);
-  }
-}, 5 * 60_000);
 
 export function checkRateLimit(ip: string): {
   allowed: boolean;
@@ -62,10 +54,17 @@ export function checkRateLimit(ip: string): {
 /**
  * Extract client IP from Vercel request headers
  */
-export function getClientIP(headers: Headers): string {
+export function getClientIP(headers: any): string {
+  if (headers && typeof headers.get === 'function') {
+    return (
+      headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      headers.get('x-real-ip') ||
+      '0.0.0.0'
+    );
+  }
   return (
-    headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    headers.get('x-real-ip') ||
+    (headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    (headers['x-real-ip'] as string) ||
     '0.0.0.0'
   );
 }
