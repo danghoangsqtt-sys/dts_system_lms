@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { getNextKey, markKeyExhausted } from '../_lib/keyPool';
 import { checkRateLimit, getClientIP } from '../_lib/rateLimit';
 
-export const config = { runtime: 'edge' };
+export const maxDuration = 60;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
