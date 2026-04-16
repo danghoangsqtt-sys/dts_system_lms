@@ -188,7 +188,7 @@ export const databaseService = {
     }
   },
 
-  async saveQuestion(q: Question, userId: string, role: string = 'student') {
+  async saveQuestion(q: Question, userId: string, role: string = 'student', isNew: boolean = false) {
     const isGlobal = role === 'admin';
     const payload = {
         ...mapLocalQuestionToDb(q, userId),
@@ -196,6 +196,20 @@ export const databaseService = {
     };
     
     try {
+        if (isNew) {
+            const docId = (q.id && q.id.length <= 36 && !q.id.includes('.')) ? q.id : ID.unique();
+            try {
+                const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, docId, payload);
+                return mapDbQuestionToLocal(created);
+            } catch (e: any) {
+                if (e.code === 409) {
+                     console.warn(`Question ID ${docId} already exists, skipping creation.`);
+                     return q; // Skip gracefully if it already exists
+                }
+                throw e;
+            }
+        }
+
         if (q.id && q.id.length <= 36 && !q.id.includes('.')) { 
              try {
                  const updated = await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, q.id, payload);
@@ -243,7 +257,7 @@ export const databaseService = {
 
   async bulkInsertQuestions(questions: Question[], userId: string, role: string) {
     for (const q of questions) {
-        await this.saveQuestion(q, userId, role);
+        await this.saveQuestion(q, userId, role, true);
     }
   },
 
