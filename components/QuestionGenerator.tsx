@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { generateQuestionsByAI } from '../services/geminiService';
 import { Question, QuestionType, QuestionFolder } from '../types';
 import { extractTextFromPDF } from '../services/documentProcessor';
-import { GoogleGenAI } from "@google/genai";
 
 interface QuestionGeneratorProps {
   folders: QuestionFolder[];
@@ -160,21 +159,22 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   const handleAiFileAnalysis = async (file: File) => {
     setIsLoading(true);
     try {
-      /* Enforce exclusively using process.env.API_KEY per guidelines */
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-      /* Fix contents format to use correct structure for multi-part turn per guidelines */
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: {
-          parts: [
-            { text: "Hãy phân tích tệp/hình ảnh này và trích xuất toàn bộ câu hỏi. Chuyển đổi mọi công thức toán học, ký hiệu điện học thành LaTeX đặt trong dấu $...$. Nếu là tự luận, hãy tạo ra đáp án chuẩn đầy đủ cho trường 'correctAnswer'. Trả về định dạng JSON array: [{content, type, options, correctAnswer, explanation, bloomLevel, category}]. Lưu ý: Trường 'type' bắt buộc là 'MULTIPLE_CHOICE' hoặc 'ESSAY'." },
-            { inlineData: { data: await fileToBase64(file), mimeType: file.type } }
-          ]
-        }
+      const base64Data = await fileToBase64(file);
+      
+      // Use the chat proxy with inline data description
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Hãy phân tích tệp/hình ảnh này và trích xuất toàn bộ câu hỏi. Chuyển đổi mọi công thức toán học, ký hiệu điện học thành LaTeX đặt trong dấu $...$. Nếu là tự luận, hãy tạo ra đáp án chuẩn đầy đủ cho trường 'correctAnswer'. Trả về định dạng JSON array: [{content, type, options, correctAnswer, explanation, bloomLevel, category}]. Lưu ý: Trường 'type' bắt buộc là 'MULTIPLE_CHOICE' hoặc 'ESSAY'. [FILE_BASE64:${file.type}:${base64Data}]`,
+          model: 'gemini-2.5-flash',
+        }),
       });
 
-      const text = response.text;
-      const cleanJson = text.replace(/```json|```/g, '').trim();
+      if (!response.ok) throw new Error('AI processing failed');
+      const data = await response.json();
+      
+      const cleanJson = (data.text || '').replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
       
       const processed = parsed.map((q: any) => ({

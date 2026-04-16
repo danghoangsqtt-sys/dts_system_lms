@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, AppVersionInfo } from '../types';
 import { checkAppUpdate } from '../services/updateService';
-import { validateApiKey } from '../services/geminiService';
 import pkg from '../package.json';
 
 interface SettingsProps {
@@ -33,10 +32,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
 
   const [kbSize, setKbSize] = useState(0);
   
-  // API Key State
-  const [customApiKey, setCustomApiKey] = useState('');
-  const [isKeyVisible, setIsKeyVisible] = useState(false);
-  const [keyStatus, setKeyStatus] = useState<'IDLE' | 'TESTING' | 'VALID' | 'INVALID'>('IDLE');
 
   useEffect(() => {
     const kb = JSON.parse(localStorage.getItem('knowledge_base') || '[]');
@@ -47,13 +42,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
         localStorage.setItem('app_settings', JSON.stringify(newSettings));
         onNotify("Đã tự động chuyển về Gemini 2.5 Flash để đảm bảo ổn định.", "info");
     }
-
-    // Load custom API key
-    const storedKey = localStorage.getItem('DTS_GEMINI_API_KEY');
-    if (storedKey) {
-        setCustomApiKey(storedKey);
-        setKeyStatus('IDLE'); // Assuming valid if previously stored, or allow re-test
-    }
   }, []);
 
   const saveSettings = () => {
@@ -61,35 +49,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
     onNotify("Đã lưu cấu hình hệ thống LMS.", "success");
   };
 
-  const handleSaveApiKey = () => {
-    if (!customApiKey.trim()) {
-        onNotify("Vui lòng nhập API Key hợp lệ.", "warning");
-        return;
-    }
-    localStorage.setItem('DTS_GEMINI_API_KEY', customApiKey.trim());
-    onNotify("Đã lưu Gemini API Key cá nhân.", "success");
-    setKeyStatus('IDLE');
-  };
-
-  const handleTestApiKey = async () => {
-    if (!customApiKey) return;
-    setKeyStatus('TESTING');
-    const isValid = await validateApiKey(customApiKey);
-    if (isValid) {
-        setKeyStatus('VALID');
-        onNotify("Kết nối Gemini thành công!", "success");
-    } else {
-        setKeyStatus('INVALID');
-        onNotify("API Key không hợp lệ hoặc hết hạn mức.", "error");
-    }
-  };
-
-  const handleDeleteApiKey = () => {
-    localStorage.removeItem('DTS_GEMINI_API_KEY');
-    setCustomApiKey('');
-    setKeyStatus('IDLE');
-    onNotify("Đã xóa Key cá nhân. Hệ thống sẽ sử dụng Key mặc định.", "info");
-  };
 
   const handleExportBackup = () => {
     try {
@@ -217,77 +176,6 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
         {/* Right Column: Configuration (Spanning 2 cols) */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* NEW SECTION: AI API Key Configuration */}
-          <section className="bg-white chamfer-lg border border-slate-200 chamfer-shadow p-8">
-            <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
-                <div className="w-10 h-10 chamfer-sm flex items-center justify-center bg-blue-600 text-white">
-                    <i className="fas fa-key"></i>
-                </div>
-                <div>
-                    <h3 className="font-black text-slate-900 uppercase tracking-tight text-lg">Cấu hình AI (Gemini)</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Bring Your Own Key (BYOK)</p>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Gemini API Key Cá nhân</label>
-                    <div className="flex gap-2">
-                        <div className="relative flex-1">
-                            <input 
-                                type={isKeyVisible ? "text" : "password"} 
-                                value={customApiKey}
-                                onChange={(e) => { setCustomApiKey(e.target.value); setKeyStatus('IDLE'); }}
-                                placeholder="Nhập API Key của bạn (bắt đầu bằng AIza...)"
-                                className={`w-full p-3 pr-10 bg-slate-50 border-2 chamfer-sm font-bold text-slate-700 outline-none focus:bg-white transition-all ${keyStatus === 'VALID' ? 'border-green-500' : keyStatus === 'INVALID' ? 'border-red-500' : 'border-slate-200 focus:border-[#14452F]'}`}
-                            />
-                            <button 
-                                onClick={() => setIsKeyVisible(!isKeyVisible)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#14452F]"
-                            >
-                                <i className={`fas ${isKeyVisible ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                            </button>
-                        </div>
-                        <button 
-                            onClick={handleSaveApiKey}
-                            className="bg-[#14452F] text-white px-5 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] shadow-md transition-all"
-                        >
-                            Lưu
-                        </button>
-                    </div>
-                    <p className="text-[10px] text-slate-400 italic">
-                        Nếu để trống, hệ thống sẽ sử dụng API Key mặc định. Key cá nhân giúp bạn tránh giới hạn quota chung.
-                    </p>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                    <button 
-                        onClick={handleTestApiKey} 
-                        disabled={keyStatus === 'TESTING' || !customApiKey}
-                        className={`px-4 py-2 chamfer-sm font-black text-[10px] uppercase tracking-widest border transition-all flex items-center gap-2 ${
-                            keyStatus === 'VALID' ? 'bg-green-100 text-green-700 border-green-200' :
-                            keyStatus === 'INVALID' ? 'bg-red-100 text-red-700 border-red-200' :
-                            'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
-                        }`}
-                    >
-                        {keyStatus === 'TESTING' ? <i className="fas fa-circle-notch fa-spin"></i> : 
-                         keyStatus === 'VALID' ? <i className="fas fa-check-circle"></i> : 
-                         keyStatus === 'INVALID' ? <i className="fas fa-exclamation-triangle"></i> : 
-                         <i className="fas fa-plug"></i>}
-                        {keyStatus === 'TESTING' ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
-                    </button>
-
-                    {customApiKey && (
-                        <button 
-                            onClick={handleDeleteApiKey}
-                            className="px-4 py-2 chamfer-sm font-black text-[10px] uppercase tracking-widest border border-red-100 text-red-500 hover:bg-red-50 transition-all"
-                        >
-                            <i className="fas fa-trash-alt mr-2"></i> Xóa Key
-                        </button>
-                    )}
-                </div>
-            </div>
-          </section>
 
           <section className="bg-white chamfer-lg border border-slate-200 chamfer-shadow p-8 h-auto">
             <div className="flex items-center gap-4 mb-8 pb-4 border-b border-slate-100">

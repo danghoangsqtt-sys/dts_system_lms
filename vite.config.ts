@@ -11,10 +11,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     base: '/',
     define: {
-      // Expose API_KEY to the client-side code safely
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      // Polyfill process for libraries that might expect it
-      'process.env': process.env
+      // SECURITY: Do NOT expose any process.env or API keys here.
+      // All AI requests go through /api/ai/* serverless proxy.
     },
     server: {
       port: 3000,

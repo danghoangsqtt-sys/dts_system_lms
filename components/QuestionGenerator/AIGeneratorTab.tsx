@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { extractTextFromPDF } from '../../services/documentProcessor';
 import { generateQuestionsByAI } from '../../services/geminiService';
+import { ID } from '../../lib/appwrite';
 import { Question, QuestionType, QuestionFolder } from '../../types';
 
 interface AIGeneratorTabProps {
@@ -63,7 +64,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
       
       const processed = rawQuestions.map(q => ({
         ...q, 
-        id: Math.random().toString(36).substr(2, 9), 
+        id: ID.unique(), 
         folderId: 'default',
         folder: targetFolder, // Assign selected folder
         createdAt: Date.now(),

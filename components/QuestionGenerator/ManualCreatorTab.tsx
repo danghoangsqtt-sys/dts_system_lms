@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, QuestionType, QuestionFolder } from '../../types';
 import ImportModal from '../QuestionBank/ImportModal';
+import { ID } from '../../lib/appwrite';
 
 interface ManualCreatorTabProps {
   folders: QuestionFolder[]; // Kept for interface compatibility but we use `availableFolders` string array
@@ -40,7 +41,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
       if (importedQuestions.length > 0) {
           importedQuestions.forEach((q: any) => {
               const newQuestion: Question = {
-                  id: Math.random().toString(36).substr(2, 9),
+                  id: ID.unique(),
                   content: q.content || '',
                   type: QuestionType.MULTIPLE_CHOICE,
                   options: (q.options || []).map((o: string) => o.replace(/^[A-D]\.\s*/, '')),
@@ -110,7 +111,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     const newQuestion: Question = {
       ...manualQ,
       correctAnswer: finalCorrectAnswer,
-      id: Math.random().toString(36).substr(2, 9),
+      id: ID.unique(),
       createdAt: Date.now(),
       options: manualQ.type === QuestionType.MULTIPLE_CHOICE ? manualQ.options : undefined,
       folderId: 'default' // Fallback for legacy

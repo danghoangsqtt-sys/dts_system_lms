@@ -126,10 +126,20 @@ const LiveChat: React.FC<LiveChatProps> = ({ voiceName = 'Kore', onClose }) => {
     setIsInitializing(true);
 
     try {
-      const apiKey = process.env.API_KEY;
+      // Fetch API key securely from server-side proxy
+      let apiKey: string | null = null;
+      try {
+        const tokenRes = await fetch('/api/ai/token');
+        if (tokenRes.ok) {
+          const tokenData = await tokenRes.json();
+          apiKey = tokenData.key;
+        }
+      } catch (e) {
+        console.error('[DHSYSTEM-DEBUG] Failed to get AI token:', e);
+      }
       
       if (!apiKey) {
-        setError("API Key configuration missing in environment variables.");
+        setError("Không thể kết nối tới hệ thống AI. Vui lòng thử lại.");
         setIsInitializing(false);
         return;
       }
