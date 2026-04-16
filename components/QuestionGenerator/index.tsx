@@ -97,8 +97,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
         }));
 
         // --- SAVE TO DB ---
-        // --- CHANGED: Pass user role ---
-        await databaseService.bulkInsertQuestions(processedQuestions, user.id, user.role);
+        // Let App.tsx handle the source of truth save via onSaveQuestions.
 
         onSaveQuestions(processedQuestions);
         setPendingQuestions([]);
