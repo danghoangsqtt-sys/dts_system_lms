@@ -13,5 +13,4 @@ build/
 .env.development
 
 .DS_Store
-package-lock.json
 tsconfig.tsbuildinfo
