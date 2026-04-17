@@ -47,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     };
 
-    const PRIMARY_MODEL = 'gemini-2.5-flash';
+    const PRIMARY_MODEL = 'gemini-2.5-flash-preview-04-17';
     const FALLBACK_MODEL = 'gemini-2.0-flash';
     let currentModel = PRIMARY_MODEL;
 

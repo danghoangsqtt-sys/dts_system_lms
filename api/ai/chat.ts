@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing message or history' });
     }
 
-    const PRIMARY_MODEL = 'gemini-2.5-flash';
+    const PRIMARY_MODEL = 'gemini-2.5-flash-preview-04-17';
     const FALLBACK_MODEL = 'gemini-2.0-flash';
     let currentModel = model || PRIMARY_MODEL;
     if (currentModel.includes('preview')) currentModel = PRIMARY_MODEL;
