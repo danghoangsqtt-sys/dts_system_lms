@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Question, QuestionType, QuestionFolder } from '../../types';
+import { formatContent } from '../../utils/textFormatter';
 import ImportModal from '../QuestionBank/ImportModal';
 import { ID } from '../../lib/appwrite';
 
@@ -196,8 +197,20 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    {isLoading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : <i className="fas fa-image text-xl"></i>}
                    <input type="file" accept="image/*" className="hidden" onChange={handleAttachImage} />
                 </label>
-             </div>
-          </div>
+              </div>
+              {/* KaTeX Preview cho nội dung câu hỏi */}
+              {manualQ.content && manualQ.content.includes('$') && (
+                  <div className="border border-blue-200 bg-blue-50/30 chamfer-sm p-4 mt-2">
+                      <div className="flex items-center gap-2 mb-2">
+                          <i className="fas fa-eye text-blue-500 text-[10px]"></i>
+                          <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Xem trước (KaTeX)</span>
+                      </div>
+                      <div className="text-sm text-slate-800 leading-relaxed bg-white p-3 chamfer-sm border border-blue-100">
+                          {formatContent(manualQ.content)}
+                      </div>
+                  </div>
+              )}
+           </div>
           
           <div className="space-y-6">
              <div className="grid grid-cols-2 gap-4">
@@ -226,26 +239,33 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                    <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest ml-1 mb-1 block">Phương án &amp; Đáp án đúng</label>
                    <div className="grid grid-cols-1 gap-2">
                       {manualQ.options.map((opt, i) => (
-                        <div key={i} className="flex gap-2">
-                          <input 
-                            type="text" 
-                            value={opt} 
-                            onChange={e => { 
-                                const n = [...manualQ.options]; 
-                                n[i] = e.target.value; 
-                                setManualQ({...manualQ, options: n}); 
-                            }} 
-                            placeholder={`Phương án ${String.fromCharCode(65+i)}`} 
-                            className="flex-1 px-4 py-3 bg-white border border-gray-200 chamfer-sm outline-none focus:border-[#14452F] text-sm font-medium shadow-sm transition-all" 
-                          />
-                          <button 
-                            type="button"
-                            title={`Chọn đáp án ${String.fromCharCode(65+i)}`}
-                            onClick={() => setSelectedIndex(i)} 
-                            className={`w-12 h-12 chamfer-sm flex items-center justify-center transition-all ${selectedIndex === i ? 'bg-green-600 text-white shadow-lg' : 'bg-white text-gray-300 border border-gray-100 hover:border-green-300'}`}
-                          >
-                            <i className="fas fa-check text-xs"></i>
-                          </button>
+                        <div key={i} className="space-y-1">
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              value={opt} 
+                              onChange={e => { 
+                                  const n = [...manualQ.options]; 
+                                  n[i] = e.target.value; 
+                                  setManualQ({...manualQ, options: n}); 
+                              }} 
+                              placeholder={`Phương án ${String.fromCharCode(65+i)}`} 
+                              className="flex-1 px-4 py-3 bg-white border border-gray-200 chamfer-sm outline-none focus:border-[#14452F] text-sm font-medium shadow-sm transition-all" 
+                            />
+                            <button 
+                              type="button"
+                              title={`Chọn đáp án ${String.fromCharCode(65+i)}`}
+                              onClick={() => setSelectedIndex(i)} 
+                              className={`w-12 h-12 chamfer-sm flex items-center justify-center transition-all ${selectedIndex === i ? 'bg-green-600 text-white shadow-lg' : 'bg-white text-gray-300 border border-gray-100 hover:border-green-300'}`}
+                            >
+                              <i className="fas fa-check text-xs"></i>
+                            </button>
+                          </div>
+                          {opt && opt.includes('$') && (
+                              <div className="ml-0 pl-3 border-l-2 border-blue-200 text-sm text-slate-700 bg-blue-50/20 py-1 px-2 chamfer-sm">
+                                  {formatContent(opt)}
+                              </div>
+                          )}
                         </div>
                       ))}
                    </div>
@@ -259,6 +279,12 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                       placeholder="Nhập nội dung đáp án chuẩn chi tiết để AI làm căn cứ chấm điểm..." 
                       className="w-full h-32 p-5 bg-white border border-purple-100 chamfer-md outline-none focus:border-purple-500 font-medium transition-all shadow-sm" 
                    />
+                   {manualQ.correctAnswer && manualQ.correctAnswer.includes('$') && (
+                        <div className="border border-purple-200 bg-purple-50/30 chamfer-sm p-3 mt-2">
+                            <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest mb-1 block"><i className="fas fa-eye mr-1"></i>Preview</span>
+                            <div className="text-sm text-slate-800 bg-white p-2 chamfer-sm border border-purple-100">{formatContent(manualQ.correctAnswer)}</div>
+                        </div>
+                    )}
                 </div>
              )}
 

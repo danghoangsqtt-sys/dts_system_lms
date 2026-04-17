@@ -10,6 +10,10 @@ export default function StudentApproval() {
     // Tách biệt 2 trạng thái để Admin dễ kiểm soát
     const [activeTab, setActiveTab] = useState<'PENDING' | 'APPROVED'>('PENDING');
 
+    // Track pending class changes for approved students (studentId -> newClassId)
+    const [pendingClassChanges, setPendingClassChanges] = useState<Record<string, string>>({});
+    const [changingClassIds, setChangingClassIds] = useState<Set<string>>(new Set());
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -33,6 +37,7 @@ export default function StudentApproval() {
                 email: doc.email,
                 status: doc.status,
                 classId: doc.class_id,
+                originalClassId: doc.class_id, // Lưu lớp gốc để so sánh khi thay đổi
                 avatarUrl: doc.avatar_url,
                 created_by: doc.created_by // Bắt buộc lấy trường này để hiển thị Badge
             }));
@@ -52,10 +57,27 @@ export default function StudentApproval() {
                 status: 'approved',
                 class_id: classId
             });
-            setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: 'approved', classId: classId } : s));
+            setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: 'approved', classId: classId, originalClassId: classId } : s));
             alert("Đã phê duyệt thành công!");
         } catch (error) {
             alert("Lỗi khi phê duyệt!");
+        }
+    };
+
+    const handleChangeClass = async (studentId: string, newClassId: string) => {
+        if (!newClassId) return alert("Vui lòng chọn lớp mới!");
+        setChangingClassIds(prev => new Set(prev).add(studentId));
+        try {
+            await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.profiles, studentId, {
+                class_id: newClassId
+            });
+            setStudents(prev => prev.map(s => s.id === studentId ? { ...s, classId: newClassId, originalClassId: newClassId } : s));
+            setPendingClassChanges(prev => { const copy = {...prev}; delete copy[studentId]; return copy; });
+            alert("Đã chuyển lớp thành công!");
+        } catch (error) {
+            alert("Lỗi khi chuyển lớp!");
+        } finally {
+            setChangingClassIds(prev => { const copy = new Set(prev); copy.delete(studentId); return copy; });
         }
     };
 
@@ -67,6 +89,12 @@ export default function StudentApproval() {
         } catch (error) {
             alert("Lỗi khi xóa!");
         }
+    };
+
+    const getClassName = (classId: string | null) => {
+        if (!classId) return null;
+        const cls = classes.find(c => c.id === classId);
+        return cls ? cls.name : null;
     };
 
     const pendingStudents = students.filter(s => s.status === 'pending');
@@ -105,7 +133,7 @@ export default function StudentApproval() {
                         <tr>
                             <th className="p-4 font-bold text-slate-600 text-sm">Thông tin Học viên</th>
                             <th className="p-4 font-bold text-slate-600 text-sm text-center">Trạng thái</th>
-                            <th className="p-4 font-bold text-slate-600 text-sm w-64">Phân Lớp</th>
+                            <th className="p-4 font-bold text-slate-600 text-sm w-72">Phân Lớp</th>
                             <th className="p-4 font-bold text-slate-600 text-sm text-right">Thao tác</th>
                         </tr>
                     </thead>
@@ -113,7 +141,14 @@ export default function StudentApproval() {
                         {displayList.length === 0 ? (
                             <tr><td colSpan={4} className="p-10 text-center text-slate-500 font-medium bg-slate-50/50">Không có học viên nào trong danh mục này.</td></tr>
                         ) : (
-                            displayList.map(student => (
+                            displayList.map(student => {
+                                const isApproved = student.status === 'approved';
+                                const currentClassName = getClassName(student.originalClassId);
+                                const selectedClassId = pendingClassChanges[student.id] ?? student.classId;
+                                const hasClassChanged = isApproved && selectedClassId !== student.originalClassId;
+                                const isChanging = changingClassIds.has(student.id);
+
+                                return (
                                 <tr key={student.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                                     <td className="p-4">
                                         <div className="flex items-center gap-4">
@@ -145,18 +180,53 @@ export default function StudentApproval() {
                                         )}
                                     </td>
                                     <td className="p-4 align-middle">
-                                        <select 
-                                            title="Chọn lớp học"
-                                            value={student.classId || ''} 
-                                            onChange={(e) => {
-                                                setStudents(prev => prev.map(s => s.id === student.id ? { ...s, classId: e.target.value } : s));
-                                            }}
-                                            className="w-full p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#14452F] text-sm font-bold shadow-sm"
-                                            disabled={student.status === 'approved'}
-                                        >
-                                            <option value="">-- Chọn lớp học --</option>
-                                            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
+                                        <div className="space-y-2">
+                                            {/* Hiển thị tên lớp hiện tại cho học viên đã duyệt */}
+                                            {isApproved && currentClassName && (
+                                                <div className="flex items-center gap-1.5 text-[10px] font-black text-[#14452F] uppercase tracking-widest">
+                                                    <i className="fas fa-school text-xs"></i> Lớp hiện tại: {currentClassName}
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-2">
+                                                <select 
+                                                    title="Chọn lớp học"
+                                                    value={selectedClassId || ''} 
+                                                    onChange={(e) => {
+                                                        if (isApproved) {
+                                                            // Approved: track pending change, don't commit yet
+                                                            setPendingClassChanges(prev => ({...prev, [student.id]: e.target.value}));
+                                                        } else {
+                                                            // Pending: update local state immediately (commit on approve)
+                                                            setStudents(prev => prev.map(s => s.id === student.id ? { ...s, classId: e.target.value } : s));
+                                                        }
+                                                    }}
+                                                    className={`flex-1 p-2.5 bg-white border rounded-lg outline-none focus:border-[#14452F] text-sm font-bold shadow-sm transition-all ${hasClassChanged ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}
+                                                >
+                                                    <option value="">-- Chọn lớp học --</option>
+                                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                                {/* Nút xác nhận chuyển lớp - chỉ hiện khi admin chọn lớp khác */}
+                                                {hasClassChanged && (
+                                                    <div className="flex gap-1 shrink-0 animate-fade-in">
+                                                        <button 
+                                                            onClick={() => handleChangeClass(student.id, selectedClassId)}
+                                                            disabled={isChanging}
+                                                            className="w-9 h-9 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center disabled:opacity-50" 
+                                                            title="Xác nhận chuyển lớp"
+                                                        >
+                                                            {isChanging ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-check text-xs"></i>}
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setPendingClassChanges(prev => { const copy = {...prev}; delete copy[student.id]; return copy; })}
+                                                            className="w-9 h-9 rounded-lg bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors flex items-center justify-center" 
+                                                            title="Hủy thay đổi"
+                                                        >
+                                                            <i className="fas fa-undo text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </td>
                                     <td className="p-4 text-right align-middle">
                                         {student.status === 'pending' && (
@@ -169,7 +239,7 @@ export default function StudentApproval() {
                                         </button>
                                     </td>
                                 </tr>
-                            ))
+                            );})
                         )}
                     </tbody>
                 </table>

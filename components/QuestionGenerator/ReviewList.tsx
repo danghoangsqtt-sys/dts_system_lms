@@ -139,20 +139,28 @@ const ReviewList: React.FC<ReviewListProps> = ({
                         <div 
                           key={idx} 
                           onClick={() => onUpdateQuestion(i, { ...q, correctAnswer: opt })}
-                          className={`p-4 rounded-2xl border text-sm transition-all flex items-center gap-3 cursor-pointer ${opt === q.correctAnswer ? 'bg-green-50 border-green-200 text-green-700 font-bold ring-4 ring-green-100/50' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-200'}`}
+                          className={`p-4 rounded-2xl border text-sm transition-all flex flex-col gap-2 cursor-pointer ${opt === q.correctAnswer ? 'bg-green-50 border-green-200 text-green-700 font-bold ring-4 ring-green-100/50' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-200'}`}
                         >
-                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] shrink-0 ${opt === q.correctAnswer ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                {String.fromCharCode(65+idx)}
-                            </span>
-                            <input 
-                              value={opt}
-                              onChange={(e) => {
-                                  const newOpts = [...(q.options || [])];
-                                  newOpts[idx] = e.target.value;
-                                  onUpdateQuestion(i, { ...q, options: newOpts, correctAnswer: opt === q.correctAnswer ? e.target.value : q.correctAnswer });
-                              }}
-                              className="bg-transparent border-none w-full p-0 focus:ring-0 font-medium"
-                            />
+                            <div className="flex items-center gap-3">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] shrink-0 ${opt === q.correctAnswer ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                    {String.fromCharCode(65+idx)}
+                                </span>
+                                <input 
+                                  value={opt}
+                                  onChange={(e) => {
+                                      const newOpts = [...(q.options || [])];
+                                      newOpts[idx] = e.target.value;
+                                      onUpdateQuestion(i, { ...q, options: newOpts, correctAnswer: opt === q.correctAnswer ? e.target.value : q.correctAnswer });
+                                  }}
+                                  className="bg-transparent border-none w-full p-0 focus:ring-0 font-medium"
+                                />
+                            </div>
+                            {/* KaTeX Preview cho option */}
+                            {opt && opt.includes('$') && (
+                                <div className="ml-9 pl-3 border-l-2 border-blue-200 text-sm text-gray-700 bg-blue-50/30 py-1 px-2 rounded">
+                                    {formatContent(opt)}
+                                </div>
+                            )}
                         </div>
                         ))}
                     </div>

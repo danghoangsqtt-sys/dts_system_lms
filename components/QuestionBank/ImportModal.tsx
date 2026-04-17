@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { parseExamText } from '../../utils/textExamParser';
+import { formatContent } from '../../utils/textFormatter';
 
 export default function ImportModal({ onClose, onImport }: { onClose: () => void, onImport: (qs: any[]) => void }) {
     const [rawText, setRawText] = useState('');
@@ -133,11 +134,11 @@ Chọn D`,
                                         </span>
                                     </div>
                                     {q.correctAnswer && q.type !== 'ESSAY' && (
-                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">Đáp án: {q.correctAnswer}</span>
+                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">Đáp án: {q.correctAnswer.includes('$') ? formatContent(q.correctAnswer) : q.correctAnswer}</span>
                                     )}
                                 </div>
 
-                                <p className="mb-2 whitespace-pre-wrap font-medium text-slate-700">{q.content}</p>
+                                <div className="mb-2 whitespace-pre-wrap font-medium text-slate-700">{q.content.includes('$') ? formatContent(q.content) : q.content}</div>
 
                                 {/* Khu vực Hình Ảnh */}
                                 <div className="mb-3">
@@ -175,7 +176,7 @@ Chọn D`,
                                 {q.type === 'MULTIPLE_CHOICE' && q.options && q.options.length > 0 && (
                                     <div className="space-y-1 mb-2">
                                         {q.options.map((opt: string, i: number) => (
-                                            <div key={i} className={`p-2 rounded text-sm ${q.correctAnswer && opt.startsWith(q.correctAnswer) ? 'bg-green-50 border border-green-200 font-bold text-green-800' : 'bg-slate-50 text-slate-700 border border-slate-100'}`}>{opt}</div>
+                                            <div key={i} className={`p-2 rounded text-sm ${q.correctAnswer && opt.startsWith(q.correctAnswer) ? 'bg-green-50 border border-green-200 font-bold text-green-800' : 'bg-slate-50 text-slate-700 border border-slate-100'}`}>{opt.includes('$') ? formatContent(opt) : opt}</div>
                                         ))}
                                     </div>
                                 )}
@@ -183,7 +184,7 @@ Chọn D`,
                                 {/* Hiển thị Đáp án Tự luận (nếu có) */}
                                 {q.type === 'ESSAY' && q.correctAnswer && (
                                     <div className="mt-2 p-3 bg-purple-50 border border-purple-100 rounded text-sm text-slate-700">
-                                        <span className="font-bold text-purple-700">Gợi ý đáp án:</span> {q.correctAnswer}
+                                        <span className="font-bold text-purple-700">Gợi ý đáp án:</span> {q.correctAnswer.includes('$') ? formatContent(q.correctAnswer) : q.correctAnswer}
                                     </div>
                                 )}
 

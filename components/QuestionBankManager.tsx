@@ -30,6 +30,11 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const [dbQuestions, setDbQuestions] = useState<Question[]>([]);
   const [dbExams, setDbExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Sort State
+  type SortOption = 'newest' | 'oldest' | 'type' | 'bloom' | 'alpha';
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const BLOOM_ORDER: Record<string, number> = { 'Nhận biết': 1, 'Thông hiểu': 2, 'Vận dụng': 3, 'Phân tích': 4, 'Đánh giá': 5, 'Sáng tạo': 6 };
   
   // Folder State (Questions)
   const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
@@ -183,14 +188,27 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   }, [dbQuestions, customFolders]);
 
   const displayQuestions = useMemo(() => {
-    return dbQuestions.filter(q => {
+    const filtered = dbQuestions.filter(q => {
         const contentStr = typeof q.content === 'string' ? q.content : (q.content as any).content || '';
         const matchSearch = contentStr.toLowerCase().includes(search.toLowerCase());
         const matchTab = activeTab === 'ALL' || q.type === activeTab;
         const matchFolder = selectedFolder === 'ALL' || (q.folder || 'Mặc định') === selectedFolder;
         return matchSearch && matchTab && matchFolder;
     });
-  }, [dbQuestions, search, activeTab, selectedFolder]);
+
+    // Sort logic
+    const getContentStr = (q: Question) => typeof q.content === 'string' ? q.content : (q.content as any).content || '';
+    return [...filtered].sort((a, b) => {
+        switch (sortBy) {
+            case 'oldest': return (a.createdAt || 0) - (b.createdAt || 0);
+            case 'newest': return (b.createdAt || 0) - (a.createdAt || 0);
+            case 'type': return (a.type || '').localeCompare(b.type || '');
+            case 'bloom': return (BLOOM_ORDER[a.bloomLevel || ''] || 99) - (BLOOM_ORDER[b.bloomLevel || ''] || 99);
+            case 'alpha': return getContentStr(a).localeCompare(getContentStr(b), 'vi');
+            default: return 0;
+        }
+    });
+  }, [dbQuestions, search, activeTab, selectedFolder, sortBy]);
 
   // --- Exam Folder Logic ---
   const uniqueExamFolders = useMemo(() => {
@@ -542,6 +560,7 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                 ) : (
                     <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
                         {managerTab === 'QUESTIONS' && (
+                            <>
                             <div className="flex gap-1 bg-white p-1 chamfer-sm border border-slate-200">
                                 {['ALL', QuestionType.MULTIPLE_CHOICE, QuestionType.ESSAY].map(type => (
                                     <button key={type} onClick={() => setActiveTab(type as any)} className={`px-4 py-2 chamfer-sm text-[9px] font-black uppercase transition-all ${activeTab === type ? 'bg-[#14452F] text-white' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -549,6 +568,24 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                                     </button>
                                 ))}
                             </div>
+                            {/* SORT DROPDOWN */}
+                            <div className="relative flex items-center gap-1.5 bg-white p-1 chamfer-sm border border-slate-200">
+                                <i className="fas fa-sort text-slate-400 text-[10px] ml-2"></i>
+                                <select 
+                                    value={sortBy} 
+                                    onChange={e => setSortBy(e.target.value as SortOption)} 
+                                    className="appearance-none bg-transparent pr-6 pl-1 py-2 text-[9px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
+                                    title="Sắp xếp câu hỏi"
+                                >
+                                    <option value="newest">Mới nhất</option>
+                                    <option value="oldest">Cũ nhất</option>
+                                    <option value="type">Theo loại</option>
+                                    <option value="bloom">Theo Bloom</option>
+                                    <option value="alpha">A → Z</option>
+                                </select>
+                                <i className="fas fa-chevron-down text-[8px] text-slate-400 absolute right-2.5 pointer-events-none"></i>
+                            </div>
+                            </>
                         )}
                         {managerTab === 'EXAMS' && (
                             <button onClick={() => setIsCreatingExam(true)} className="bg-[#14452F] text-white px-6 py-3 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all shadow-lg flex items-center gap-2">
@@ -711,10 +748,24 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                         <input list="editFolderList" value={editingQuestion.folder || ''} onChange={e => setEditingQuestion({...editingQuestion, folder: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 chamfer-sm font-bold text-sm text-slate-700 focus:bg-white focus:border-[#14452F] outline-none" placeholder="Chọn hoặc nhập tên thư mục mới..." />
                         <datalist id="editFolderList">{uniqueFolders.filter(f => f !== 'ALL').map(f => <option key={f} value={f} />)}</datalist>
                     </div>
-                    {/* Content & Options editing fields... (Kept same as before) */}
+                    {/* Content & Options editing fields with KaTeX Preview */}
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest">Nội dung câu hỏi</label>
-                        <textarea value={typeof editingQuestion.content === 'string' ? editingQuestion.content : JSON.stringify(editingQuestion.content)} onChange={e => setEditingQuestion({...editingQuestion, content: e.target.value})} className="w-full h-32 p-4 bg-slate-50 border border-slate-200 chamfer-sm font-medium text-slate-700 focus:bg-white focus:border-[#14452F] outline-none resize-none" />
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest">Nội dung câu hỏi</label>
+                        </div>
+                        <textarea value={typeof editingQuestion.content === 'string' ? editingQuestion.content : JSON.stringify(editingQuestion.content)} onChange={e => setEditingQuestion({...editingQuestion, content: e.target.value})} className="w-full h-32 p-4 bg-slate-50 border border-slate-200 chamfer-sm font-medium text-slate-700 focus:bg-white focus:border-[#14452F] outline-none resize-none font-mono text-xs" placeholder="Hỗ trợ KaTeX: $x^2$ hoặc $$\\frac{a}{b}$$" />
+                        {/* KaTeX LIVE PREVIEW */}
+                        {(typeof editingQuestion.content === 'string' ? editingQuestion.content : '').includes('$') && (
+                            <div className="border border-blue-200 bg-blue-50/30 chamfer-sm p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <i className="fas fa-eye text-blue-500 text-[10px]"></i>
+                                    <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Xem trước (KaTeX Rendered)</span>
+                                </div>
+                                <div className="text-sm text-slate-800 leading-relaxed bg-white p-3 chamfer-sm border border-blue-100">
+                                    {formatContent(typeof editingQuestion.content === 'string' ? editingQuestion.content : JSON.stringify(editingQuestion.content))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2"><label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest">Loại câu hỏi</label><select value={editingQuestion.type} onChange={e => setEditingQuestion({...editingQuestion, type: e.target.value as QuestionType})} className="w-full p-3 bg-slate-50 border border-slate-200 chamfer-sm font-bold text-sm"><option value={QuestionType.MULTIPLE_CHOICE}>Trắc nghiệm</option><option value={QuestionType.ESSAY}>Tự luận</option></select></div>
@@ -724,16 +775,31 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                         <div className="space-y-3 bg-[#E8F5E9]/30 p-6 chamfer-md border border-[#14452F]/10">
                             <label className="text-[10px] font-black text-[#14452F] uppercase tracking-widest block mb-2">Các phương án (Chọn đáp án đúng)</label>
                             {editingQuestion.options?.map((opt, i) => (
-                                <div key={i} className="flex gap-2">
-                                    <input type="text" value={opt} onChange={e => { const newOpts = [...(editingQuestion.options || [])]; newOpts[i] = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts, correctAnswer: editingQuestion.correctAnswer === opt ? e.target.value : editingQuestion.correctAnswer}); }} className="flex-1 p-2 bg-white border border-slate-200 chamfer-sm text-sm" placeholder={`Phương án ${String.fromCharCode(65+i)}`} />
-                                    <button type="button" onClick={() => setEditingQuestion({...editingQuestion, correctAnswer: opt})} className={`w-10 chamfer-sm flex items-center justify-center transition-all ${editingQuestion.correctAnswer === opt ? 'bg-green-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-300'}`}><i className="fas fa-check"></i></button>
+                                <div key={i} className="space-y-1">
+                                    <div className="flex gap-2">
+                                        <input type="text" value={opt} onChange={e => { const newOpts = [...(editingQuestion.options || [])]; newOpts[i] = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts, correctAnswer: editingQuestion.correctAnswer === opt ? e.target.value : editingQuestion.correctAnswer}); }} className="flex-1 p-2 bg-white border border-slate-200 chamfer-sm text-sm font-mono" placeholder={`Phương án ${String.fromCharCode(65+i)}`} />
+                                        <button type="button" onClick={() => setEditingQuestion({...editingQuestion, correctAnswer: opt})} className={`w-10 chamfer-sm flex items-center justify-center transition-all ${editingQuestion.correctAnswer === opt ? 'bg-green-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-300'}`}><i className="fas fa-check"></i></button>
+                                    </div>
+                                    {/* Preview cho từng option nếu có KaTeX */}
+                                    {opt && opt.includes('$') && (
+                                        <div className="ml-0 pl-3 border-l-2 border-blue-200 text-sm text-slate-700 bg-blue-50/20 py-1 px-2 chamfer-sm">
+                                            {formatContent(opt)}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     ) : (
                         <div className="space-y-2 bg-purple-50/50 p-6 chamfer-md border border-purple-100">
                             <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Đáp án chuẩn / Gợi ý</label>
-                            <textarea value={editingQuestion.correctAnswer} onChange={e => setEditingQuestion({...editingQuestion, correctAnswer: e.target.value})} className="w-full h-24 p-4 bg-white border border-purple-200 chamfer-sm font-medium text-slate-700 outline-none focus:border-purple-500" />
+                            <textarea value={editingQuestion.correctAnswer} onChange={e => setEditingQuestion({...editingQuestion, correctAnswer: e.target.value})} className="w-full h-24 p-4 bg-white border border-purple-200 chamfer-sm font-medium text-slate-700 outline-none focus:border-purple-500 font-mono text-xs" />
+                            {/* Preview cho đáp án tự luận nếu có KaTeX */}
+                            {editingQuestion.correctAnswer && editingQuestion.correctAnswer.includes('$') && (
+                                <div className="border border-purple-200 bg-purple-50/30 chamfer-sm p-3">
+                                    <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest mb-1 block"><i className="fas fa-eye mr-1"></i>Preview</span>
+                                    <div className="text-sm text-slate-800 bg-white p-2 chamfer-sm border border-purple-100">{formatContent(editingQuestion.correctAnswer)}</div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </form>
