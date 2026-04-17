@@ -11,7 +11,7 @@
   "author": "DHsystem",
   "license": "ISC",
   "dependencies": {
-    "@google/genai": "*",
+    "@google/genai": "^1.41.0",
     "@vercel/speed-insights": "^1.3.1",
     "appwrite": "^16.0.0",
     "katex": "^0.16.9",
