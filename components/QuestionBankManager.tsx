@@ -31,10 +31,21 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const [dbExams, setDbExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Sort State
+  // Sort & Filter State
   type SortOption = 'newest' | 'oldest' | 'type' | 'bloom' | 'alpha';
   const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [bloomFilter, setBloomFilter] = useState<string>('ALL');
+
+  const BLOOM_LEVELS_LIST = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
   const BLOOM_ORDER: Record<string, number> = { 'Nhận biết': 1, 'Thông hiểu': 2, 'Vận dụng': 3, 'Phân tích': 4, 'Đánh giá': 5, 'Sáng tạo': 6 };
+  const BLOOM_CONFIG: Record<string, { active: string; inactive: string; dot: string }> = {
+    'Nhận biết':  { active: 'bg-blue-600 text-white border-blue-600',   inactive: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100',   dot: 'bg-blue-500' },
+    'Thông hiểu': { active: 'bg-teal-600 text-white border-teal-600',   inactive: 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100',   dot: 'bg-teal-500' },
+    'Vận dụng':   { active: 'bg-green-600 text-white border-green-600', inactive: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100', dot: 'bg-green-500' },
+    'Phân tích':  { active: 'bg-amber-600 text-white border-amber-600', inactive: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100', dot: 'bg-amber-500' },
+    'Đánh giá':   { active: 'bg-orange-600 text-white border-orange-600',inactive: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100',dot: 'bg-orange-500' },
+    'Sáng tạo':   { active: 'bg-purple-600 text-white border-purple-600',inactive: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100',dot: 'bg-purple-500' },
+  };
   
   // Folder State (Questions)
   const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
@@ -193,7 +204,8 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
         const matchSearch = contentStr.toLowerCase().includes(search.toLowerCase());
         const matchTab = activeTab === 'ALL' || q.type === activeTab;
         const matchFolder = selectedFolder === 'ALL' || (q.folder || 'Mặc định') === selectedFolder;
-        return matchSearch && matchTab && matchFolder;
+        const matchBloom = bloomFilter === 'ALL' || q.bloomLevel === bloomFilter;
+        return matchSearch && matchTab && matchFolder && matchBloom;
     });
 
     // Sort logic
@@ -208,7 +220,7 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
             default: return 0;
         }
     });
-  }, [dbQuestions, search, activeTab, selectedFolder, sortBy]);
+  }, [dbQuestions, search, activeTab, selectedFolder, sortBy, bloomFilter]);
 
   // --- Exam Folder Logic ---
   const uniqueExamFolders = useMemo(() => {
@@ -568,6 +580,31 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                                     </button>
                                 ))}
                             </div>
+                            
+                            {/* BLOOM FILTER */}
+                            <div className="flex gap-1 bg-white p-1 chamfer-sm border border-slate-200">
+                                <button 
+                                    onClick={() => setBloomFilter('ALL')} 
+                                    className={`px-3 py-2 chamfer-sm text-[9px] font-black uppercase transition-all border ${bloomFilter === 'ALL' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100/50'}`}
+                                >
+                                    Mọi mức độ
+                                </button>
+                                {BLOOM_LEVELS_LIST.map(level => {
+                                    const config = BLOOM_CONFIG[level];
+                                    const isActive = bloomFilter === level;
+                                    return (
+                                        <button 
+                                            key={level} 
+                                            onClick={() => setBloomFilter(level)} 
+                                            className={`px-3 py-2 chamfer-sm text-[9px] font-black uppercase transition-all flex items-center gap-1 border ${isActive ? config.active : config.inactive}`}
+                                        >
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : config.dot}`}></span>
+                                            {level}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
                             {/* SORT DROPDOWN */}
                             <div className="relative flex items-center gap-1.5 bg-white p-1 chamfer-sm border border-slate-200">
                                 <i className="fas fa-sort text-slate-400 text-[10px] ml-2"></i>
