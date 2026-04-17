@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getKeyFromRequest } from '../lib/keyPool';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit';
+import { getKeyFromRequest } from '../lib/keyPool.js';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
 
 export const maxDuration = 60;
 

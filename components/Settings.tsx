@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
-  const [geminiKey, setGeminiKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('DTS_GEMINI_API_KEY') || '');
 
   const handleSaveKey = () => {
     const trimmed = geminiKey.trim();

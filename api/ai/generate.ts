@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getKeyFromRequest } from '../lib/keyPool';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit';
+import { getKeyFromRequest } from '../lib/keyPool.js';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
 
 export const maxDuration = 60;
 
@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { prompt, count, difficulty } = req.body;
+    const { prompt } = req.body;
     if (!prompt) {
       return res.status(400).json({ error: 'Missing prompt' });
     }
