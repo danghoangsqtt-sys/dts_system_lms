@@ -1,35 +1,32 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import { getNextKey, markKeyExhausted } from '../lib/keyPool.js';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
+import { getNextKey, getKeyByIndex } from '../lib/keyPool';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
-export const config = { runtime: 'edge' };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+function setCors(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: CORS_HEADERS });
-  }
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const ip = getClientIP(req.headers);
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), { status: 429, headers: CORS_HEADERS });
+    return res.status(429).json({ error: 'Rate limit exceeded' });
   }
 
   try {
-    const { texts } = await req.json();
+    const { texts } = req.body;
     if (!texts || !Array.isArray(texts) || texts.length === 0) {
-      return new Response(JSON.stringify({ error: 'Missing texts array' }), { status: 400, headers: CORS_HEADERS });
+      return res.status(400).json({ error: 'Missing texts array' });
     }
 
     const apiKey = getNextKey();
@@ -49,9 +46,11 @@ export default async function handler(req: Request) {
           break;
         } catch (error: any) {
           if (error.toString().includes('429')) {
-            markKeyExhausted(apiKey);
             retries++;
-            await new Promise(r => setTimeout(r, 3000 * retries));
+            // On retry, try alternate key
+            const altKey = getKeyByIndex(retries);
+            const altAi = new GoogleGenAI({ apiKey: altKey });
+            await new Promise(r => setTimeout(r, 2000 * retries));
             continue;
           }
           throw error;
@@ -59,8 +58,9 @@ export default async function handler(req: Request) {
       }
     }
 
-    return new Response(JSON.stringify({ embeddings }), { status: 200, headers: CORS_HEADERS });
+    return res.status(200).json({ embeddings });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: CORS_HEADERS });
+    console.error('[EMBED-ERROR]', error);
+    return res.status(500).json({ error: error.message });
   }
 }

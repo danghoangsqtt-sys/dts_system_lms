@@ -1,35 +1,32 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getNextKey, markKeyExhausted } from '../lib/keyPool.js';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
+import { getNextKey, getKeyByIndex } from '../lib/keyPool';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
-export const config = { runtime: 'edge' };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+function setCors(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: CORS_HEADERS });
-  }
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const ip = getClientIP(req.headers);
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded', retryAfterMs: limit.retryAfterMs }), { status: 429, headers: CORS_HEADERS });
+    return res.status(429).json({ error: 'Rate limit exceeded', retryAfterMs: limit.retryAfterMs });
   }
 
   try {
-    const { question, correctAnswer, userAnswer } = await req.json();
+    const { question, correctAnswer, userAnswer } = req.body;
     if (!question || !userAnswer) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: CORS_HEADERS });
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const apiKey = getNextKey();
@@ -55,14 +52,42 @@ export default async function handler(req: Request) {
 
       const text = response.text;
       if (!text) {
-        return new Response(JSON.stringify({ score: 0, feedback: 'AI không thể đánh giá.' }), { status: 200, headers: CORS_HEADERS });
+        return res.status(200).json({ score: 0, feedback: 'AI không thể đánh giá.' });
       }
-      return new Response(text, { status: 200, headers: CORS_HEADERS });
+      return res.status(200).json(JSON.parse(text));
+
     } catch (error: any) {
-      if (error.toString().includes('429')) markKeyExhausted(apiKey);
+      // On quota error, try alternate key once
+      if (error.toString().includes('429')) {
+        const altKey = getKeyByIndex(1);
+        const altAi = new GoogleGenAI({ apiKey: altKey });
+        try {
+          const response = await altAi.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: `Đánh giá câu trả lời.\nCâu hỏi: ${question}\nĐáp án: ${correctAnswer}\nTrả lời: ${userAnswer}`,
+            config: {
+              responseMimeType: 'application/json',
+              temperature: 0.3,
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  score: { type: Type.NUMBER },
+                  feedback: { type: Type.STRING },
+                },
+                required: ['score', 'feedback'],
+              },
+            },
+          });
+          const text = response.text;
+          return res.status(200).json(text ? JSON.parse(text) : { score: 0, feedback: 'AI không thể đánh giá.' });
+        } catch (retryErr: any) {
+          throw retryErr;
+        }
+      }
       throw error;
     }
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: CORS_HEADERS });
+    console.error('[EVALUATE-ERROR]', error);
+    return res.status(500).json({ error: error.message });
   }
 }

@@ -1,64 +1,64 @@
 /**
- * API Key Pool with Round-Robin & Cooldown
- * Keys that hit 429/RESOURCE_EXHAUSTED are automatically skipped for 60s.
+ * API Key Pool — Stateless for Serverless
+ * 
+ * CRITICAL: In Vercel Serverless, each invocation may run in a different
+ * lambda instance. In-memory state (round-robin index, cooldown timers)
+ * does NOT persist between invocations.
+ * 
+ * Strategy: Hash-based key selection using request timestamp.
+ * This distributes load across keys without requiring shared state.
  */
 
-interface KeyState {
-  key: string;
-  cooldownUntil: number; // timestamp ms
-}
+let _keys: string[] | null = null;
 
-const pool: KeyState[] = [];
-let currentIndex = 0;
-let initialized = false;
-
-function initPool() {
-  if (initialized) return;
+function getKeys(): string[] {
+  if (_keys) return _keys;
+  
+  const keys: string[] = [];
   const key1 = process.env.GEMINI_API_KEY_1;
   const key2 = process.env.GEMINI_API_KEY_2;
-  if (key1) pool.push({ key: key1, cooldownUntil: 0 });
-  if (key2) pool.push({ key: key2, cooldownUntil: 0 });
-  if (pool.length === 0) {
-    throw new Error('[FATAL] No GEMINI_API_KEY_1 or GEMINI_API_KEY_2 environment variables configured.');
+  if (key1) keys.push(key1);
+  if (key2) keys.push(key2);
+  
+  if (keys.length === 0) {
+    throw new Error('[FATAL] No GEMINI_API_KEY env vars found.');
   }
-  initialized = true;
+  
+  _keys = keys;
+  return keys;
 }
 
 /**
- * Get the next available API key using round-robin.
- * Skips keys that are in cooldown.
+ * Get a key using simple alternation based on current second.
+ * Even seconds → key 1, Odd seconds → key 2.
+ * This ensures natural load distribution without shared state.
  */
 export function getNextKey(): string {
-  initPool();
-  const now = Date.now();
-  
-  // Try all keys starting from current index
-  for (let i = 0; i < pool.length; i++) {
-    const idx = (currentIndex + i) % pool.length;
-    const entry = pool[idx];
-    if (now >= entry.cooldownUntil) {
-      currentIndex = (idx + 1) % pool.length;
-      return entry.key;
-    }
-  }
-  
-  // All keys in cooldown — return the one with shortest remaining cooldown
-  const sorted = [...pool].sort((a, b) => a.cooldownUntil - b.cooldownUntil);
-  return sorted[0].key;
+  const keys = getKeys();
+  if (keys.length === 1) return keys[0];
+  const index = Math.floor(Date.now() / 1000) % keys.length;
+  return keys[index];
 }
 
 /**
- * Mark a key as rate-limited. It will be skipped for `cooldownMs`.
+ * Get a specific key by index (0 or 1). Used for retry with alternate key.
  */
-export function markKeyExhausted(key: string, cooldownMs = 60_000): void {
-  const entry = pool.find(k => k.key === key);
-  if (entry) {
-    entry.cooldownUntil = Date.now() + cooldownMs;
-    console.warn(`[KEY-POOL] Key ...${key.slice(-6)} in cooldown for ${cooldownMs / 1000}s`);
-  }
+export function getKeyByIndex(index: number): string {
+  const keys = getKeys();
+  return keys[index % keys.length];
 }
 
+/**
+ * Get total number of keys configured.
+ */
 export function getPoolSize(): number {
-  initPool();
-  return pool.length;
+  return getKeys().length;
+}
+
+/**
+ * markKeyExhausted is a no-op in stateless mode.
+ * Retry logic in handlers will switch to the other key directly.
+ */
+export function markKeyExhausted(_key: string, _cooldownMs = 60_000): void {
+  // No-op: stateless serverless cannot persist cooldown state.
 }

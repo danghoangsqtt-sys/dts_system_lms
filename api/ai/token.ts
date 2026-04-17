@@ -1,38 +1,35 @@
-import { getNextKey } from '../lib/keyPool.js';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getNextKey } from '../lib/keyPool';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
-export const config = { runtime: 'edge' };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+function setCors(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
 /**
  * Token endpoint for LiveChat audio sessions.
  * Returns a temporary API key for the client to use with the Live API.
- * Rate limited to prevent abuse.
  */
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
   const ip = getClientIP(req.headers);
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
-    return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
-      status: 429, headers: CORS_HEADERS,
-    });
+    return res.status(429).json({ error: 'Rate limit exceeded' });
   }
 
   try {
     const key = getNextKey();
-    return new Response(JSON.stringify({ key }), { status: 200, headers: CORS_HEADERS });
+    return res.status(200).json({ key });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: CORS_HEADERS });
+    console.error('[TOKEN-ERROR]', error);
+    return res.status(500).json({ error: error.message });
   }
 }

@@ -1,71 +1,57 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import { getNextKey, markKeyExhausted } from '../lib/keyPool.js';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
+import { getNextKey, getKeyByIndex, getPoolSize } from '../lib/keyPool';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+function setCors(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCors(res);
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405, headers: CORS_HEADERS,
-    });
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Rate limit check
+  // Rate limit
   const ip = getClientIP(req.headers);
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
-    return new Response(JSON.stringify({
+    res.setHeader('Retry-After', String(Math.ceil(limit.retryAfterMs / 1000)));
+    return res.status(429).json({
       error: 'Hệ thống đang quá tải. Vui lòng thử lại sau.',
       retryAfterMs: limit.retryAfterMs,
-      queuePosition: limit.currentCount - 9,
-    }), {
-      status: 429,
-      headers: { ...CORS_HEADERS, 'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)) },
     });
   }
 
   try {
-    const body = await req.json();
-    const { history, message, systemInstruction, temperature, tools } = body;
+    const { history, message, systemInstruction, temperature, tools, model } = req.body;
 
     if (!message && !history) {
-      return new Response(JSON.stringify({ error: 'Missing message or history' }), {
-        status: 400, headers: CORS_HEADERS,
-      });
+      return res.status(400).json({ error: 'Missing message or history' });
     }
 
     const PRIMARY_MODEL = 'gemini-2.5-flash';
-    const FALLBACK_MODEL = 'gemini-flash-latest';
-    let currentModel = body.model || PRIMARY_MODEL;
-    
-    // Safety: Block preview models
+    const FALLBACK_MODEL = 'gemini-2.0-flash';
+    let currentModel = model || PRIMARY_MODEL;
     if (currentModel.includes('preview')) currentModel = PRIMARY_MODEL;
-
-    const apiKey = getNextKey();
-    const ai = new GoogleGenAI({ apiKey });
-
-    let config: any = {
-      temperature: temperature || 0.7,
-    };
-    if (systemInstruction) config.systemInstruction = systemInstruction;
-    if (tools) config.tools = tools;
 
     let lastError: any = null;
     const maxRetries = 3;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Alternate key on each retry
+      const apiKey = attempt === 0 ? getNextKey() : getKeyByIndex(attempt);
+      const ai = new GoogleGenAI({ apiKey });
+
+      const config: any = { temperature: temperature || 0.7 };
+      if (systemInstruction) config.systemInstruction = systemInstruction;
+      if (tools) config.tools = tools;
+
       try {
         const response = await ai.models.generateContent({
           model: currentModel,
@@ -80,12 +66,12 @@ export default async function handler(req: Request) {
           ?.filter((chunk: any) => chunk.web)
           ?.map((chunk: any) => ({ uri: chunk.web.uri, title: chunk.web.title })) || [];
 
-        return new Response(JSON.stringify({
+        return res.status(200).json({
           text: response.text || '',
           sources,
           modelUsed: currentModel,
           remaining: limit.remaining,
-        }), { status: 200, headers: CORS_HEADERS });
+        });
 
       } catch (error: any) {
         lastError = error;
@@ -95,30 +81,26 @@ export default async function handler(req: Request) {
         const isOverload = msg.includes('503') || status === 503;
 
         if (isQuota || isOverload) {
-          markKeyExhausted(apiKey);
-          
+          // Fall back to cheaper model
           if (currentModel !== FALLBACK_MODEL) {
             currentModel = FALLBACK_MODEL;
-            if (config.thinkingConfig) delete config.thinkingConfig;
             continue;
           }
-          
           // Exponential backoff
           await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
           continue;
         }
-        break; // Non-retryable error
+        break; // Non-retryable
       }
     }
 
-    return new Response(JSON.stringify({
+    return res.status(500).json({
       error: lastError?.message || 'Lỗi xử lý AI',
       code: lastError?.status || 500,
-    }), { status: 500, headers: CORS_HEADERS });
+    });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), {
-      status: 500, headers: CORS_HEADERS,
-    });
+    console.error('[CHAT-ERROR]', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }

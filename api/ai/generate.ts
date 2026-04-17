@@ -1,37 +1,33 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getNextKey, markKeyExhausted } from '../lib/keyPool.js';
-import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
+import { getNextKey, getKeyByIndex } from '../lib/keyPool';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
-export const config = { runtime: 'edge' };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+function setCors(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: CORS_HEADERS });
-  }
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const ip = getClientIP(req.headers);
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
-    return new Response(JSON.stringify({
-      error: 'Rate limit exceeded', retryAfterMs: limit.retryAfterMs,
-    }), { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)) } });
+    res.setHeader('Retry-After', String(Math.ceil(limit.retryAfterMs / 1000)));
+    return res.status(429).json({ error: 'Rate limit exceeded', retryAfterMs: limit.retryAfterMs });
   }
 
   try {
-    const { prompt, count, difficulty } = await req.json();
+    const { prompt, count, difficulty } = req.body;
     if (!prompt) {
-      return new Response(JSON.stringify({ error: 'Missing prompt' }), { status: 400, headers: CORS_HEADERS });
+      return res.status(400).json({ error: 'Missing prompt' });
     }
 
     const responseSchema = {
@@ -51,14 +47,14 @@ export default async function handler(req: Request) {
       },
     };
 
-    const apiKey = getNextKey();
-    const ai = new GoogleGenAI({ apiKey });
-
     const PRIMARY_MODEL = 'gemini-2.5-flash';
-    const FALLBACK_MODEL = 'gemini-flash-latest';
+    const FALLBACK_MODEL = 'gemini-2.0-flash';
     let currentModel = PRIMARY_MODEL;
 
     for (let attempt = 0; attempt < 3; attempt++) {
+      const apiKey = attempt === 0 ? getNextKey() : getKeyByIndex(attempt);
+      const ai = new GoogleGenAI({ apiKey });
+
       try {
         const response = await ai.models.generateContent({
           model: currentModel,
@@ -72,10 +68,9 @@ export default async function handler(req: Request) {
 
         const text = response.text;
         if (!text) {
-          return new Response(JSON.stringify({ questions: [] }), { status: 200, headers: CORS_HEADERS });
+          return res.status(200).json({ questions: [] });
         }
-
-        return new Response(JSON.stringify({ questions: JSON.parse(text) }), { status: 200, headers: CORS_HEADERS });
+        return res.status(200).json({ questions: JSON.parse(text) });
 
       } catch (error: any) {
         const msg = error.toString();
@@ -83,7 +78,6 @@ export default async function handler(req: Request) {
         const isOverload = msg.includes('503');
 
         if (isQuota || isOverload) {
-          markKeyExhausted(apiKey);
           if (currentModel !== FALLBACK_MODEL) {
             currentModel = FALLBACK_MODEL;
             continue;
@@ -95,8 +89,9 @@ export default async function handler(req: Request) {
       }
     }
 
-    return new Response(JSON.stringify({ error: 'AI overloaded' }), { status: 503, headers: CORS_HEADERS });
+    return res.status(503).json({ error: 'AI overloaded, please try again later.' });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: CORS_HEADERS });
+    console.error('[GENERATE-ERROR]', error);
+    return res.status(500).json({ error: error.message });
   }
 }

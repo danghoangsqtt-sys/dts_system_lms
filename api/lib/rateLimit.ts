@@ -1,7 +1,10 @@
 /**
- * Rate Limiter — Sliding Window per IP
- * Max 10 requests per minute per IP address.
- * Returns { allowed, retryAfter, queuePosition } 
+ * Rate Limiter — Best-effort for Serverless
+ * 
+ * NOTE: In-memory rate limiting is per-instance only.
+ * Each Vercel lambda has its own memory, so this is NOT globally accurate.
+ * It still provides protection within a single warm instance.
+ * For production-grade rate limiting, use Redis/Upstash.
  */
 
 interface RateLimitEntry {
@@ -10,8 +13,7 @@ interface RateLimitEntry {
 
 const ipMap = new Map<string, RateLimitEntry>();
 const WINDOW_MS = 60_000; // 1 minute
-const MAX_REQUESTS = 10;
-
+const MAX_REQUESTS = 15; // Generous limit since it's per-instance only
 
 export function checkRateLimit(ip: string): {
   allowed: boolean;
@@ -20,28 +22,20 @@ export function checkRateLimit(ip: string): {
   currentCount: number;
 } {
   const now = Date.now();
-  
+
   if (!ipMap.has(ip)) {
     ipMap.set(ip, { timestamps: [] });
   }
-  
+
   const entry = ipMap.get(ip)!;
-  
-  // Remove timestamps outside the window
   entry.timestamps = entry.timestamps.filter(t => now - t < WINDOW_MS);
-  
+
   if (entry.timestamps.length >= MAX_REQUESTS) {
     const oldestInWindow = entry.timestamps[0];
     const retryAfterMs = WINDOW_MS - (now - oldestInWindow);
-    return {
-      allowed: false,
-      remaining: 0,
-      retryAfterMs,
-      currentCount: entry.timestamps.length,
-    };
+    return { allowed: false, remaining: 0, retryAfterMs, currentCount: entry.timestamps.length };
   }
-  
-  // Allow and record
+
   entry.timestamps.push(now);
   return {
     allowed: true,
@@ -52,9 +46,20 @@ export function checkRateLimit(ip: string): {
 }
 
 /**
- * Extract client IP from Vercel request headers
+ * Extract client IP — works with both Node.js IncomingHttpHeaders
+ * and Web API Headers objects.
  */
 export function getClientIP(headers: any): string {
+  // Node.js format (VercelRequest.headers is an object)
+  if (headers && typeof headers === 'object' && !('get' in headers)) {
+    const forwarded = headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+    const realIp = headers['x-real-ip'];
+    if (typeof realIp === 'string') return realIp;
+    return '0.0.0.0';
+  }
+
+  // Web API Headers format (fallback)
   if (headers && typeof headers.get === 'function') {
     return (
       headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -62,9 +67,6 @@ export function getClientIP(headers: any): string {
       '0.0.0.0'
     );
   }
-  return (
-    (headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    (headers['x-real-ip'] as string) ||
-    '0.0.0.0'
-  );
+
+  return '0.0.0.0';
 }
