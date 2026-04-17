@@ -1,15 +1,28 @@
 
 /**
- * documentProcessor.ts — Secure Version
- * Embedding calls are proxied through /api/ai/embed serverless function.
- * NO API keys exist on the client.
+ * documentProcessor.ts — Client-Side (Bluebee Architecture)
+ * 
+ * Embedding calls go directly to Gemini API using user's own API Key.
+ * No server proxy needed.
  */
 
 import { VectorChunk, PdfMetadata } from "../types";
 import * as pdfjsLib from "pdfjs-dist";
+import { GoogleGenAI } from "@google/genai";
 
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+const STORAGE_KEY_API = 'DTS_GEMINI_API_KEY';
+
+/**
+ * Get API Key for embedding — same logic as geminiService
+ */
+const getApiKey = (): string | undefined => {
+  const customKey = localStorage.getItem(STORAGE_KEY_API);
+  if (customKey && customKey.trim().length > 0) return customKey;
+  return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
+};
 
 const parsePdfDate = (dateStr: string | undefined): string => {
   if (!dateStr) return '';
@@ -105,7 +118,7 @@ export const chunkText = (text: string, targetChunkSize: number = 1000, overlap:
 };
 
 /**
- * Embed text chunks via the serverless proxy.
+ * Embed text chunks DIRECTLY via Gemini API (no server proxy).
  */
 export const embedChunks = async (
   docId: string, 
@@ -113,49 +126,47 @@ export const embedChunks = async (
   onProgress?: (percent: number) => void
 ): Promise<VectorChunk[]> => {
   
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("Vui lòng nhập Gemini API Key trong Cài đặt để sử dụng tính năng RAG.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const vectorChunks: VectorChunk[] = [];
   
-  // Process in batches of 5 to avoid timeout
-  const BATCH_SIZE = 5;
-  for (let batchStart = 0; batchStart < textChunks.length; batchStart += BATCH_SIZE) {
-    const batch = textChunks.slice(batchStart, batchStart + BATCH_SIZE);
-    
-    try {
-      const response = await fetch('/api/ai/embed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texts: batch }),
-      });
+  // Process one by one to avoid rate limits
+  for (let i = 0; i < textChunks.length; i++) {
+    let retries = 0;
+    while (retries < 3) {
+      try {
+        const response = await ai.models.embedContent({
+          model: 'gemini-embedding-001',
+          contents: [{ parts: [{ text: textChunks[i] }] }],
+        });
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          // Rate limited — wait and retry this batch
-          await new Promise(r => setTimeout(r, 5000));
-          batchStart -= BATCH_SIZE; // Retry
-          continue;
-        }
-        throw new Error(`Embed proxy error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const embeddings: number[][] = data.embeddings || [];
-
-      for (let i = 0; i < batch.length; i++) {
-        if (embeddings[i] && embeddings[i].length > 0) {
+        const values = response.embeddings?.[0]?.values;
+        if (values && values.length > 0) {
           vectorChunks.push({
             id: Math.random().toString(36).substring(7),
             docId,
-            text: batch[i],
-            embedding: embeddings[i],
+            text: textChunks[i],
+            embedding: values,
           });
         }
+        break;
+      } catch (error: any) {
+        if (error.toString().includes('429')) {
+          retries++;
+          await new Promise(r => setTimeout(r, 3000 * retries));
+          continue;
+        }
+        console.error(`Embedding chunk ${i} failed:`, error.message);
+        break; // Skip this chunk on non-retryable errors
       }
-    } catch (e: any) {
-      console.error(`Embedding batch failed at ${batchStart}:`, e.message);
     }
 
     if (onProgress) {
-      onProgress(Math.round(((batchStart + batch.length) / textChunks.length) * 100));
+      onProgress(Math.round(((i + 1) / textChunks.length) * 100));
     }
   }
 
@@ -173,7 +184,7 @@ export const cosineSimilarity = (a: number[], b: number[]) => {
 };
 
 /**
- * Find relevant chunks using embedding similarity via serverless proxy.
+ * Find relevant chunks using embedding similarity — DIRECT Gemini call.
  */
 export const findRelevantChunks = async (
   query: string,
@@ -182,17 +193,17 @@ export const findRelevantChunks = async (
 ): Promise<VectorChunk[]> => {
   if (knowledgeBase.length === 0) return [];
 
+  const apiKey = getApiKey();
+  if (!apiKey) return [];
+
   try {
-    const response = await fetch('/api/ai/embed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texts: [query] }),
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: [{ parts: [{ text: query }] }],
     });
 
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    const queryVector = data.embeddings?.[0];
+    const queryVector = response.embeddings?.[0]?.values;
     if (!queryVector || queryVector.length === 0) return [];
 
     return knowledgeBase
