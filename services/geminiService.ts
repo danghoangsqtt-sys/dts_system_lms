@@ -31,9 +31,13 @@ const getSettings = (): AppSettings => {
  * Helper: Call the serverless AI proxy with error handling and queue info.
  */
 const callAIProxy = async (endpoint: string, body: any): Promise<any> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const localKey = localStorage.getItem('DTS_GEMINI_API_KEY');
+  if (localKey) headers['X-Gemini-Key'] = localKey;
+
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
 

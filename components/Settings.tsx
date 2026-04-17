@@ -20,6 +20,24 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
+  const [geminiKey, setGeminiKey] = useState('');
+
+  const handleSaveKey = () => {
+    const trimmed = geminiKey.trim();
+    if (!trimmed.startsWith('AIza')) {
+      onNotify('API Key không hợp lệ (phải bắt đầu bằng AIza...)', 'error');
+      return;
+    }
+    localStorage.setItem('DTS_GEMINI_API_KEY', trimmed);
+    onNotify('Đã lưu Gemini API Key. Hệ thống sẽ dùng key này.', 'success');
+  };
+
+  const handleClearKey = () => {
+    localStorage.removeItem('DTS_GEMINI_API_KEY');
+    setGeminiKey('');
+    onNotify('Đã xóa key cá nhân. Hệ thống dùng key mặc định của server.', 'info');
+  };
+
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('app_settings');
     const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
@@ -175,7 +193,54 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
 
         {/* Right Column: Configuration (Spanning 2 cols) */}
         <div className="lg:col-span-2 space-y-6">
-          
+
+          {/* API Key Section */}
+          <section className="bg-white chamfer-lg border border-slate-200 chamfer-shadow p-8">
+            <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+              <div className="w-10 h-10 chamfer-sm flex items-center justify-center bg-amber-500 text-white">
+                <i className="fas fa-key"></i>
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 uppercase tracking-tight text-lg">Gemini API Key</h3>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  {localStorage.getItem('DTS_GEMINI_API_KEY')
+                    ? '✓ Đang dùng key cá nhân'
+                    : 'Đang dùng key mặc định của server'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <input
+                type="password"
+                placeholder="AIza..."
+                value={geminiKey}
+                onChange={e => setGeminiKey(e.target.value)}
+                className="flex-1 p-3 bg-slate-50 border border-slate-300 chamfer-sm font-mono text-sm outline-none focus:border-amber-500"
+              />
+              <button type="button" onClick={handleSaveKey} className="px-5 py-3 bg-amber-500 text-white chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all">
+                Lưu Key
+              </button>
+              {localStorage.getItem('DTS_GEMINI_API_KEY') && (
+                <button type="button" onClick={handleClearKey} className="px-5 py-3 bg-slate-200 text-slate-600 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                  Xóa
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-3">
+              Lấy key tại{' '}
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-amber-600 hover:underline"
+              >
+                aistudio.google.com/app/apikey
+              </a>
+              {' '}→ nhấn <strong>Get API Key</strong>. Key lưu trong trình duyệt, không gửi lên server bên thứ ba.
+            </p>
+          </section>
+
+
 
           <section className="bg-white chamfer-lg border border-slate-200 chamfer-shadow p-8 h-auto">
             <div className="flex items-center gap-4 mb-8 pb-4 border-b border-slate-100">

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getNextKey, getKeyByIndex } from '../lib/keyPool';
+import { getKeyFromRequest } from '../lib/keyPool';
 import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 function setCors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Gemini-Key');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const apiKey = getNextKey();
+    const apiKey = getKeyFromRequest(req.headers as any);
     const ai = new GoogleGenAI({ apiKey });
 
     try {
@@ -57,10 +57,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(JSON.parse(text));
 
     } catch (error: any) {
-      // On quota error, try alternate key once
+      // On quota error, retry once with same key
       if (error.toString().includes('429')) {
-        const altKey = getKeyByIndex(1);
-        const altAi = new GoogleGenAI({ apiKey: altKey });
+        const altAi = new GoogleGenAI({ apiKey });
         try {
           const response = await altAi.models.generateContent({
             model: 'gemini-2.0-flash',

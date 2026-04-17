@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import { getNextKey, getKeyByIndex, getPoolSize } from '../lib/keyPool';
+import { getKeyFromRequest } from '../lib/keyPool';
 import { checkRateLimit, getClientIP } from '../lib/rateLimit';
 
 export const maxDuration = 60;
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 function setCors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Gemini-Key');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -45,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       // Alternate key on each retry
-      const apiKey = attempt === 0 ? getNextKey() : getKeyByIndex(attempt);
+      const apiKey = getKeyFromRequest(req.headers as any);
       const ai = new GoogleGenAI({ apiKey });
 
       const config: any = { temperature: temperature || 0.7 };

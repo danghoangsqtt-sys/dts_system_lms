@@ -1,6 +1,6 @@
 /**
  * API Key — Single Key Mode
- * Reads GEMINI_API_KEY from environment variables.
+ * Priority: X-Gemini-Key request header > GEMINI_API_KEY env var.
  */
 
 let _key: string | null = null;
@@ -13,6 +13,15 @@ export function getNextKey(): string {
   }
   _key = key;
   return _key;
+}
+
+/** Returns key from request header if present, otherwise falls back to env var. */
+export function getKeyFromRequest(headers: Record<string, string | string[] | undefined>): string {
+  const headerKey = headers['x-gemini-key'];
+  if (headerKey && typeof headerKey === 'string' && headerKey.startsWith('AIza')) {
+    return headerKey;
+  }
+  return getNextKey();
 }
 
 /** Alias for compatibility — always returns the same key. */
