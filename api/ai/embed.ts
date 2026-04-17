@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { getNextKey, markKeyExhausted } from '../_lib/keyPool';
-import { checkRateLimit, getClientIP } from '../_lib/rateLimit';
+import { getNextKey, markKeyExhausted } from '../lib/keyPool.js';
+import { checkRateLimit, getClientIP } from '../lib/rateLimit.js';
 
 export const maxDuration = 60;
 export const config = { runtime: 'edge' };
