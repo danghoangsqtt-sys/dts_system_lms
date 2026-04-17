@@ -18,6 +18,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
     const [shuffleO, setShuffleO] = useState(true);
     const [examStatus, setExamStatus] = useState<'draft' | 'published'>('draft');
     const [maxAttempts, setMaxAttempts] = useState<number>(1);
+    const [examDuration, setExamDuration] = useState<number>(45);
 
     // Phòng thi
     const [activeExamData, setActiveExamData] = useState<any>(null);
@@ -110,6 +111,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
         setExamStatus(exam.status || 'draft');
         setTargetClassId(exam.class_id || '');
         setMaxAttempts(exam.max_attempts || 1);
+        setExamDuration(exam.duration || 45);
         setConfigModalOpen(true);
     };
 
@@ -124,7 +126,8 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 shuffle_options: shuffleO,
                 status: examStatus,
                 class_id: targetClassId || null,
-                max_attempts: maxAttempts
+                max_attempts: maxAttempts,
+                duration: examDuration
             };
             await databaseService.updateExam(selectedExam.id, payload);
             setExams(prev => prev.map(e => e.id === selectedExam.id ? { ...e, ...payload } : e));
@@ -351,15 +354,33 @@ export default function OnlineTestManager({ user }: { user: any }) {
                                 </select>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">Số lần thi tối đa</label>
-                                <input 
-                                    type="number" 
-                                    min="1"
-                                    value={maxAttempts} 
-                                    onChange={(e) => setMaxAttempts(parseInt(e.target.value) || 1)}
-                                    className="w-full border-2 border-slate-200 p-2 rounded outline-none focus:border-[#14452F]" 
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                                        <i className="fas fa-hourglass-half mr-1 text-orange-500"></i> Thời gian làm bài (phút)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        title="Thời gian làm bài tính bằng phút"
+                                        placeholder="45"
+                                        value={examDuration}
+                                        onChange={e => setExamDuration(parseInt(e.target.value) || 45)}
+                                        className="w-full border-2 border-orange-200 p-2 rounded outline-none focus:border-orange-400 font-bold text-orange-700 bg-orange-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Số lần thi tối đa</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        title="Số lần thi tối đa cho phép"
+                                        placeholder="1"
+                                        value={maxAttempts}
+                                        onChange={(e) => setMaxAttempts(parseInt(e.target.value) || 1)}
+                                        className="w-full border-2 border-slate-200 p-2 rounded outline-none focus:border-[#14452F]"
+                                    />
+                                </div>
                             </div>
 
                             <div>

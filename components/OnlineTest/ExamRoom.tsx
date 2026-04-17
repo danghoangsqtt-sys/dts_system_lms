@@ -1,21 +1,79 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { submitExamResult } from '../../services/databaseService';
 
-export default function ExamRoom({ exam, questions, answerData, user, onExit, isPreview = false }: { exam: any, questions: any[], answerData: any, user: any, onExit: () => void, isPreview?: boolean }) {
-    // Thời gian làm bài (tính bằng giây) - Giả sử exam.duration lưu theo phút
-    const [timeLeft, setTimeLeft] = useState((exam.duration || 45) * 60);
-    const [answers, setAnswers] = useState<Record<number, string>>({});
+export default function ExamRoom({ exam, questions, answerData, user, onExit, isPreview = false }: {
+    exam: any, questions: any[], answerData: any, user: any, onExit: () => void, isPreview?: boolean
+}) {
+    const SESSION_KEY = `dts_exam_${exam.id}_${user?.id}`;
+    const examDurationSec = (exam.duration || 45) * 60;
+
+    // ── Khôi phục session từ localStorage (chạy một lần khi mount) ──
+    const getInitialSession = () => {
+        if (isPreview) return { timeLeft: examDurationSec, answers: {} as Record<number, string>, reconnected: false };
+        try {
+            const raw = localStorage.getItem(SESSION_KEY);
+            if (raw) {
+                const s = JSON.parse(raw);
+                const elapsed = Math.floor((Date.now() - (s.savedAt || Date.now())) / 1000);
+                const remaining = Math.max(0, (s.timeLeft || examDurationSec) - elapsed);
+                const hasAnswers = Object.keys(s.answers || {}).length > 0;
+                return { timeLeft: remaining, answers: s.answers || {}, reconnected: hasAnswers && remaining > 0 };
+            }
+        } catch { localStorage.removeItem(SESSION_KEY); }
+        return { timeLeft: examDurationSec, answers: {} as Record<number, string>, reconnected: false };
+    };
+
+    const initRef = useRef(getInitialSession());
+
+    const [timeLeft, setTimeLeft] = useState(initRef.current.timeLeft);
+    const [answers, setAnswers] = useState<Record<number, string>>(initRef.current.answers);
     const [flags, setFlags] = useState<Set<number>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const startTimestamp = useRef(Date.now());
     const [viewMode, setViewMode] = useState<'TESTING' | 'REVIEW' | 'RESULT'>('TESTING');
     const [finalScore, setFinalScore] = useState<number | null>(null);
     const [correctCount, setCorrectCount] = useState<number>(0);
+    const [showReconnectBanner, setShowReconnectBanner] = useState(initRef.current.reconnected);
 
-    // Đồng hồ đếm ngược
+    // Refs luôn giữ giá trị mới nhất cho event handlers / cleanup
+    const answersRef = useRef(answers);
+    const timeLeftRef = useRef(timeLeft);
+    const viewModeRef = useRef(viewMode);
+    useEffect(() => { answersRef.current = answers; }, [answers]);
+    useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
+    useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+
+    // Ẩn banner reconnect sau 4 giây
+    useEffect(() => {
+        if (!showReconnectBanner) return;
+        const t = setTimeout(() => setShowReconnectBanner(false), 4000);
+        return () => clearTimeout(t);
+    }, [showReconnectBanner]);
+
+    // ── Tự động lưu session mỗi 10 giây + lưu khi ẩn tab / đóng trình duyệt ──
+    useEffect(() => {
+        if (isPreview) return;
+        const save = () => {
+            if (viewModeRef.current !== 'TESTING') return;
+            localStorage.setItem(SESSION_KEY, JSON.stringify({
+                timeLeft: timeLeftRef.current,
+                answers: answersRef.current,
+                savedAt: Date.now()
+            }));
+        };
+        const interval = setInterval(save, 10000);
+        document.addEventListener('visibilitychange', save);
+        window.addEventListener('beforeunload', save);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', save);
+            window.removeEventListener('beforeunload', save);
+        };
+    }, [isPreview]);
+
+    // ── Đồng hồ đếm ngược ──
     useEffect(() => {
         if (timeLeft <= 0) {
-            handleAutoSubmit();
+            if (viewModeRef.current !== 'RESULT') submitFinalExam();
             return;
         }
         const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
@@ -28,46 +86,34 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
         return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
-    const handleSelectOption = (qIndex: number, optionLetter: string) => {
-        setAnswers(prev => ({ ...prev, [qIndex]: optionLetter }));
+    const handleSelectOption = (qIndex: number, value: string) => {
+        setAnswers(prev => ({ ...prev, [qIndex]: value }));
     };
 
     const toggleFlag = (qIndex: number) => {
         setFlags(prev => {
-            const newFlags = new Set(prev);
-            if (newFlags.has(qIndex)) newFlags.delete(qIndex);
-            else newFlags.add(qIndex);
-            return newFlags;
+            const n = new Set(prev);
+            n.has(qIndex) ? n.delete(qIndex) : n.add(qIndex);
+            return n;
         });
     };
 
     const scrollToQuestion = (index: number) => {
-        const el = document.getElementById(`question-${index}`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    const handleGoToReview = () => {
-        setViewMode('REVIEW');
+        document.getElementById(`question-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
     const submitFinalExam = async () => {
         setIsSubmitting(true);
+        const currentAnswers = answersRef.current;
+        const currentTimeLeft = timeLeftRef.current;
         let correct = 0;
-        let answersDetail: any = {};
+        const answersDetail: any = {};
 
         questions.forEach((q, idx) => {
-            const studentAns = answers[idx];
-
-            // examEngine lưu key 1-indexed (qNumber = index + 1), value là AnswerEntry {correctLetter, content, explanation}
+            const studentAns = currentAnswers[idx];
             const correctAnswerObj = answerData[idx + 1];
             const correctAnsLetter = correctAnswerObj?.correctLetter;
-
-            if (q.type === 'MULTIPLE_CHOICE') {
-                if (studentAns && studentAns === correctAnsLetter) {
-                    correct++;
-                }
-            }
-
+            if (q.type === 'MULTIPLE_CHOICE' && studentAns && studentAns === correctAnsLetter) correct++;
             answersDetail[q.id || `q-${idx}`] = {
                 question_content: typeof q.content === 'string' ? q.content.substring(0, 100) : 'Nội dung câu hỏi',
                 student_answer: studentAns || 'Bỏ trống',
@@ -76,55 +122,45 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
             };
         });
 
-        // Đề phòng trường hợp lỗi chia cho 0 nếu đề không có câu hỏi nào
         const calculatedScore = questions.length > 0 ? (correct / questions.length) * 10 : 0;
         setCorrectCount(correct);
         setFinalScore(calculatedScore);
 
         try {
-            const timeSpent = (exam.duration || 45) * 60 - timeLeft;
-
             if (!isPreview) {
-                const compressedData = JSON.stringify({
-                    student_name: user.fullName || user.name || 'Học viên',
-                    correct_answers: correct,
-                    total_questions: questions.length,
-                    time_spent: timeSpent,
-                    answers: answers,
-                    answers_detail: answersDetail
-                });
                 await submitExamResult({
                     exam_id: exam.id,
                     student_id: user.id,
                     score: parseFloat(calculatedScore.toFixed(2)),
-                    answers_data: compressedData
+                    answers_data: JSON.stringify({
+                        student_name: user.fullName || user.name || 'Học viên',
+                        correct_answers: correct,
+                        total_questions: questions.length,
+                        time_spent: examDurationSec - currentTimeLeft,
+                        answers: currentAnswers,
+                        answers_detail: answersDetail
+                    })
                 });
+                localStorage.removeItem(SESSION_KEY);
             }
-
             setViewMode('RESULT');
         } catch (error) {
-            console.error("Lỗi nộp bài:", error);
-            alert("Lỗi nộp bài do cấu trúc dữ liệu Appwrite. Vui lòng thử lại!");
+            console.error('Lỗi nộp bài:', error);
+            alert('Lỗi nộp bài. Vui lòng thử lại!');
         } finally {
             setIsSubmitting(false);
         }
     };
-    
-    // Auto submit khi hết giờ
-    const handleAutoSubmit = () => {
-        if (viewMode !== 'RESULT') submitFinalExam();
-    };
 
+    // ── Màn hình XÁC NHẬN NỘP BÀI ──
     if (viewMode === 'REVIEW') {
         const answeredCount = Object.keys(answers).length;
         const unansweredCount = questions.length - answeredCount;
-
         return (
             <div className="fixed inset-0 bg-slate-50 z-50 overflow-y-auto">
                 <div className="max-w-3xl mx-auto my-10 p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
                     <h2 className="text-3xl font-black text-[#14452F] text-center mb-2">XÁC NHẬN NỘP BÀI</h2>
                     <p className="text-center text-slate-500 mb-8 font-medium">Bạn có chắc chắn muốn nộp bài thi lúc này?</p>
-                    
                     <div className="grid grid-cols-2 gap-6 mb-10">
                         <div className="bg-[#E8F5E9] p-6 rounded-xl border border-green-200 text-center">
                             <h3 className="text-4xl font-black text-[#14452F] mb-1">{answeredCount}</h3>
@@ -135,20 +171,11 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
                             <p className={`text-sm font-bold uppercase ${unansweredCount > 0 ? 'text-red-500' : 'text-slate-500'}`}>Câu bỏ trống</p>
                         </div>
                     </div>
-
                     <div className="flex gap-4 justify-center">
-                        <button 
-                            onClick={() => setViewMode('TESTING')} 
-                            disabled={isSubmitting}
-                            className="px-8 py-4 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold uppercase tracking-widest transition-all"
-                        >
+                        <button type="button" onClick={() => setViewMode('TESTING')} disabled={isSubmitting} className="px-8 py-4 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold uppercase tracking-widest transition-all">
                             Quay lại làm tiếp
                         </button>
-                        <button 
-                            onClick={submitFinalExam} 
-                            disabled={isSubmitting}
-                            className="px-8 py-4 bg-[#14452F] hover:bg-[#0f3523] text-white rounded-xl font-black uppercase tracking-widest transition-all shadow-lg flex items-center gap-2"
-                        >
+                        <button type="button" onClick={submitFinalExam} disabled={isSubmitting} className="px-8 py-4 bg-[#14452F] hover:bg-[#0f3523] text-white rounded-xl font-black uppercase tracking-widest transition-all shadow-lg flex items-center gap-2">
                             {isSubmitting ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
                             NỘP BÀI CHÍNH THỨC
                         </button>
@@ -158,6 +185,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
         );
     }
 
+    // ── Màn hình KẾT QUẢ ──
     if (viewMode === 'RESULT') {
         return (
             <div className="fixed inset-0 bg-slate-50 z-50 flex items-center justify-center p-4">
@@ -170,17 +198,12 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
                         ? <p className="text-amber-600 font-bold mb-8 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2"><i className="fas fa-flask mr-2"></i>Chế độ thi thử — Kết quả không được lưu.</p>
                         : <p className="text-slate-500 mb-8 font-medium">Kết quả của bạn đã được ghi nhận vào hệ thống.</p>
                     }
-                    
                     <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
                         <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Điểm số</p>
                         <p className="text-6xl font-black text-[#14452F]">{finalScore?.toFixed(2)}</p>
                         <p className="text-sm font-bold text-slate-500 mt-2">Đúng {correctCount} / {questions.length} câu</p>
                     </div>
-
-                    <button 
-                        onClick={onExit} 
-                        className="w-full py-4 bg-[#14452F] hover:bg-[#0f3523] text-white rounded-xl font-black uppercase tracking-widest transition-all shadow-lg"
-                    >
+                    <button type="button" onClick={onExit} className="w-full py-4 bg-[#14452F] hover:bg-[#0f3523] text-white rounded-xl font-black uppercase tracking-widest transition-all shadow-lg">
                         Quay lại trang chủ
                     </button>
                 </div>
@@ -188,83 +211,97 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
         );
     }
 
+    // ── Màn hình LÀM BÀI ──
     return (
         <div className="fixed inset-0 bg-slate-100 z-[100] flex flex-col md:flex-row overflow-hidden">
-            {/* Banner chế độ thi thử */}
+
+            {/* Banner thi thử */}
             {isPreview && (
                 <div className="absolute top-0 left-0 right-0 z-10 bg-amber-400 text-amber-900 text-center text-xs font-black uppercase tracking-widest py-1.5 flex items-center justify-center gap-2">
                     <i className="fas fa-flask"></i> CHẾ ĐỘ THI THỬ — Kết quả sẽ không được lưu vào hệ thống
                 </div>
             )}
-            {/* Cột trái: Danh sách câu hỏi cuộn */}
-            <div className={`flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth ${isPreview ? 'pt-10' : ''}`}>
+
+            {/* Banner reconnect (tự ẩn sau 4s) */}
+            {showReconnectBanner && (
+                <div className="absolute top-0 left-0 right-0 z-10 bg-red-600 text-white text-xs font-black uppercase tracking-widest py-2 flex items-center justify-center gap-2 animate-pulse">
+                    <i className="fas fa-wifi"></i>
+                    ĐÃ KHÔI PHỤC PHIÊN THI — Câu trả lời và thời gian được tiếp tục từ lần trước
+                </div>
+            )}
+
+            {/* Cột trái: Câu hỏi */}
+            <div className={`flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth ${(isPreview || showReconnectBanner) ? 'pt-10' : ''}`}>
                 <div className="max-w-3xl mx-auto space-y-6 pb-20">
                     <h1 className="text-2xl font-black text-[#14452F] text-center mb-8 bg-white p-4 rounded-xl shadow-sm">
                         BÀI THI: {exam.title}
                     </h1>
-                    
+
                     {questions.map((q, index) => (
                         <div key={index} id={`question-${index}`} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                             <div className="flex justify-between items-start mb-4">
                                 <span className="font-bold text-lg text-slate-800">Câu {index + 1}:</span>
-                                <button 
+                                <button
+                                    type="button"
                                     onClick={() => toggleFlag(index)}
                                     className={`transition-colors ${flags.has(index) ? 'text-red-500' : 'text-slate-300 hover:text-red-300'}`}
-                                    title="Cắm cờ đánh dấu câu này"
+                                    title="Đánh dấu câu này"
                                 >
                                     <i className="fas fa-flag text-xl"></i>
                                 </button>
                             </div>
                             <div className="text-slate-700 mb-4 text-base whitespace-pre-wrap">{q.content}</div>
-                            
+
                             {q.imageUrl && (
                                 <img src={q.imageUrl} alt="Hình minh họa" className="max-h-48 mb-4 object-contain rounded" />
                             )}
 
-                    {/* Render Giao diện tùy theo Loại câu hỏi */}
-                    {q.type === 'ESSAY' ? (
-                        <div className="mt-4">
-                            <textarea
-                                value={answers[index] || ''}
-                                onChange={(e) => handleSelectOption(index, e.target.value)}
-                                placeholder="Nhập câu trả lời tự luận của bạn vào đây..."
-                                className="w-full h-40 p-4 border-2 border-slate-200 rounded-xl outline-none focus:border-[#14452F] focus:ring-4 focus:ring-green-50 transition-all font-medium text-slate-700 bg-slate-50"
-                            />
-                            <p className="text-right text-[10px] text-slate-400 mt-1 font-bold">Hệ thống tự động lưu nháp <i className="fas fa-save ml-1"></i></p>
-                        </div>
-                    ) : (
-                        <div className="mt-4 space-y-3">
-                            {q.options?.map((opt: string, oIdx: number) => {
-                                const optionLetter = String.fromCharCode(65 + oIdx);
-                                const isSelected = answers[index] === optionLetter;
-                                // Tự động loại bỏ chữ "A. " "B. " ở đầu do Word trích ra để giao diện đẹp hơn
-                                const cleanOpt = opt.replace(/^[A-Z][\.\:\)]\s*/i, '');
-                                return (
-                                    <label key={oIdx} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected ? 'border-[#14452F] bg-[#E8F5E9] shadow-sm' : 'border-slate-100 bg-white hover:border-green-200'}`}>
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${isSelected ? 'bg-[#14452F] text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                            {optionLetter}
-                                        </div>
-                                        <span className="font-medium text-slate-700 select-none flex-1">
-                                            {cleanOpt}
-                                        </span>
-                                        <input type="radio" name={`q-${index}`} className="hidden" checked={isSelected} onChange={() => handleSelectOption(index, optionLetter)} />
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    )}
+                            {q.type === 'ESSAY' ? (
+                                <div className="mt-4">
+                                    <textarea
+                                        value={answers[index] || ''}
+                                        onChange={e => handleSelectOption(index, e.target.value)}
+                                        placeholder="Nhập câu trả lời tự luận của bạn vào đây..."
+                                        className="w-full h-40 p-4 border-2 border-slate-200 rounded-xl outline-none focus:border-[#14452F] focus:ring-4 focus:ring-green-50 transition-all font-medium text-slate-700 bg-slate-50"
+                                    />
+                                    <p className="text-right text-[10px] text-slate-400 mt-1 font-bold">
+                                        Hệ thống tự động lưu nháp <i className="fas fa-save ml-1"></i>
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="mt-4 space-y-3">
+                                    {q.options?.map((opt: string, oIdx: number) => {
+                                        const optionLetter = String.fromCharCode(65 + oIdx);
+                                        const isSelected = answers[index] === optionLetter;
+                                        const cleanOpt = opt.replace(/^[A-Z][\.\:\)]\s*/i, '');
+                                        return (
+                                            <label key={oIdx} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected ? 'border-[#14452F] bg-[#E8F5E9] shadow-sm' : 'border-slate-100 bg-white hover:border-green-200'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${isSelected ? 'bg-[#14452F] text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                                    {optionLetter}
+                                                </div>
+                                                <span className="font-medium text-slate-700 select-none flex-1">{cleanOpt}</span>
+                                                <input type="radio" name={`q-${index}`} className="hidden" checked={isSelected} onChange={() => handleSelectOption(index, optionLetter)} />
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
             </div>
 
-            {/* Cột phải: Lưới điều hướng & Nộp bài */}
+            {/* Cột phải: Đồng hồ + Điều hướng */}
             <div className="w-full md:w-80 bg-white border-l border-slate-200 p-6 flex flex-col shrink-0">
                 <div className="text-center mb-6">
                     <p className="text-xs font-bold text-slate-500 uppercase mb-1">Thời gian còn lại</p>
                     <div className={`text-3xl font-black font-mono ${timeLeft < 300 ? 'text-red-600 animate-pulse' : 'text-[#14452F]'}`}>
                         {formatTime(timeLeft)}
                     </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                        <i className="fas fa-shield-halved mr-1 text-green-500"></i>
+                        Tự động lưu mỗi 10 giây
+                    </p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar mb-6">
@@ -274,25 +311,22 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
                             const isAnswered = !!answers[index];
                             const isFlagged = flags.has(index);
                             return (
-                                <button 
+                                <button
+                                    type="button"
                                     key={index}
                                     onClick={() => scrollToQuestion(index)}
                                     className={`relative h-10 w-full rounded font-bold text-sm transition-all border ${
-                                        isAnswered 
-                                            ? 'bg-blue-600 text-white border-blue-600' 
+                                        isAnswered
+                                            ? 'bg-blue-600 text-white border-blue-600'
                                             : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
                                     }`}
                                 >
                                     {index + 1}
-                                    {isFlagged && (
-                                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></div>
-                                    )}
+                                    {isFlagged && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></div>}
                                 </button>
                             );
                         })}
                     </div>
-                    
-                    {/* Chú giải */}
                     <div className="mt-6 space-y-2 text-xs text-slate-600">
                         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-600 rounded"></div> Đã trả lời</div>
                         <div className="flex items-center gap-2"><div className="w-3 h-3 border border-slate-300 rounded"></div> Chưa trả lời</div>
@@ -300,8 +334,9 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit, is
                     </div>
                 </div>
 
-                <button 
-                    onClick={handleGoToReview} 
+                <button
+                    type="button"
+                    onClick={() => setViewMode('REVIEW')}
                     disabled={isSubmitting}
                     className="w-full py-4 bg-[#14452F] hover:bg-[#0f3523] text-white rounded-xl font-black uppercase tracking-widest transition-all flex justify-center items-center gap-2"
                 >

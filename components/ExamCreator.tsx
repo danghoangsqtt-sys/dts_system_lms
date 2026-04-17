@@ -114,6 +114,40 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ questions, viewExam, onBack, 
     return currentQuestionIds.map(id => questions.find(q => q.id === id)).filter(Boolean) as Question[];
   }, [currentQuestionIds, questions]);
 
+  // Tính đáp án theo thứ tự hiển thị THỰC TẾ trong EXAM tab (options gốc, không xáo trộn)
+  useEffect(() => {
+    if (selectedQuestions.length === 0) return;
+    const data: Record<number, AnswerEntry> = {};
+    selectedQuestions.forEach((q, idx) => {
+      const qNum = idx + 1;
+      if (q.type === QuestionType.MULTIPLE_CHOICE && q.options) {
+        const rawCorrect = (q.correctAnswer || '').trim();
+        const cleanOptions = q.options.map(opt => opt.replace(/^[A-D][\.\:\)]\s*/i, '').trim());
+        let correctIdx = -1;
+        const letterMatch = rawCorrect.match(/^([A-D])[\.\:\)]?\s*$/i);
+        if (letterMatch) {
+          correctIdx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+        } else {
+          const cleanCorrect = rawCorrect.replace(/^[A-D][\.\:\)]\s*/i, '').trim().toLowerCase().replace(/\s+/g, '');
+          correctIdx = cleanOptions.findIndex(opt => opt.toLowerCase().replace(/\s+/g, '') === cleanCorrect);
+        }
+        const prefixes = ['A', 'B', 'C', 'D', 'E', 'F'];
+        data[qNum] = {
+          correctLetter: correctIdx !== -1 ? prefixes[correctIdx] : 'Lỗi/Chưa xác định',
+          content: correctIdx !== -1 ? cleanOptions[correctIdx] : rawCorrect,
+          explanation: q.explanation || 'Không có giải thích chi tiết.'
+        };
+      } else {
+        data[qNum] = {
+          correctLetter: 'Tự luận',
+          content: q.correctAnswer || 'Xem hướng dẫn chấm điểm',
+          explanation: q.explanation || 'Không có giải thích chi tiết.'
+        };
+      }
+    });
+    setAnswerData(data);
+  }, [selectedQuestions]);
+
   const handleGenerateExam = () => {
     const newSelectedIds: string[] = [];
     const errors: string[] = [];
