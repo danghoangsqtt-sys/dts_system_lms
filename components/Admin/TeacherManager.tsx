@@ -18,28 +18,32 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTeacherName, setNewTeacherName] = useState('');
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
-  const [newTeacherPassword, setNewTeacherPassword] = useState(''); // NEW Field
+  const [newTeacherPassword, setNewTeacherPassword] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [assigningClass, setAssigningClass] = useState<Record<string, string>>({});
 
   const fetchProfiles = async () => {
     setLoading(true);
     try {
-      const response = await databases.listDocuments(
-        APPWRITE_CONFIG.dbId,
-        APPWRITE_CONFIG.collections.profiles,
-        [
-            Query.equal('role', ['teacher', 'student']),
-            Query.orderDesc('$createdAt')
-        ]
-      );
+      const [response, classList] = await Promise.all([
+        databases.listDocuments(
+          APPWRITE_CONFIG.dbId,
+          APPWRITE_CONFIG.collections.profiles,
+          [Query.equal('role', ['teacher', 'student']), Query.orderDesc('$createdAt')]
+        ),
+        databaseService.fetchClasses().catch(() => [])
+      ]);
 
+      setClasses(classList);
       setUsers(response.documents.map(d => ({
         id: d.$id,
-        email: d.email || 'N/A', 
+        email: d.email || 'N/A',
         fullName: d.full_name || 'Người dùng hệ thống',
         role: d.role,
         avatarUrl: d.avatar_url,
-        status: d.status || 'active'
+        status: d.status || 'active',
+        classId: d.class_id || ''
       })));
     } catch (err: any) {
       onNotify(err.message, 'error');
@@ -51,6 +55,23 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
   useEffect(() => {
     fetchProfiles();
   }, []);
+
+  const handleAssignClass = async (userId: string, classId: string, userName: string) => {
+    try {
+      await databases.updateDocument(
+        APPWRITE_CONFIG.dbId,
+        APPWRITE_CONFIG.collections.profiles,
+        userId,
+        { class_id: classId || null }
+      );
+      const cls = classes.find(c => c.id === classId);
+      onNotify(`Đã phân công ${userName} vào ${cls ? cls.name : 'lớp'} thành công!`, 'success');
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, classId } : u));
+      setAssigningClass(prev => { const n = { ...prev }; delete n[userId]; return n; });
+    } catch (err: any) {
+      onNotify('Lỗi phân công lớp: ' + err.message, 'error');
+    }
+  };
 
   const handleUpdateRole = async (userId: string, newRole: 'teacher' | 'student') => {
     const actionName = newRole === 'teacher' ? 'Thăng cấp Giảng viên' : 'Hủy quyền Giảng viên';
@@ -202,11 +223,41 @@ const TeacherManager: React.FC<TeacherManagerProps> = ({ onNotify }) => {
                   <div className="mt-2"><span className={`text-[8px] font-bold px-2 py-0.5 chamfer-sm uppercase ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{user.status === 'active' ? 'Active' : 'Pending'}</span></div>
                 </div>
               </div>
-              <div className="mt-auto pt-4 border-t border-slate-100">
+              <div className="mt-auto pt-4 border-t border-slate-100 space-y-2">
                  {activeTab === 'TEACHERS' ? (
                     <button onClick={() => handleUpdateRole(user.id, 'student')} className="w-full py-2 bg-red-50 text-red-600 border border-red-100 chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2"><i className="fas fa-arrow-down"></i> Hủy quyền Giảng viên</button>
                  ) : (
-                    <button onClick={() => handleUpdateRole(user.id, 'teacher')} className="w-full py-2 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-900/10"><i className="fas fa-arrow-up"></i> Thăng cấp Giảng viên</button>
+                    <>
+                      <button onClick={() => handleUpdateRole(user.id, 'teacher')} className="w-full py-2 bg-[#14452F] text-white chamfer-sm font-black text-[10px] uppercase tracking-widest hover:bg-[#0F3624] transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-900/10"><i className="fas fa-arrow-up"></i> Thăng cấp Giảng viên</button>
+                      <div className="flex gap-1.5 items-center">
+                        <select
+                          title="Chọn lớp học để phân công"
+                          value={assigningClass[user.id] ?? user.classId ?? ''}
+                          onChange={e => setAssigningClass(prev => ({ ...prev, [user.id]: e.target.value }))}
+                          className="flex-1 border border-slate-200 chamfer-sm text-[10px] font-bold text-slate-700 px-2 py-1.5 outline-none focus:border-[#14452F] bg-slate-50 min-w-0"
+                        >
+                          <option value="">-- Chưa có lớp --</option>
+                          {classes.map((cls: any) => (
+                            <option key={cls.id} value={cls.id}>{cls.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleAssignClass(user.id, assigningClass[user.id] ?? user.classId ?? '', user.fullName)}
+                          disabled={!(assigningClass[user.id] ?? user.classId)}
+                          className="px-3 py-1.5 bg-blue-600 text-white chamfer-sm font-black text-[10px] uppercase hover:bg-blue-700 transition-all disabled:opacity-40 shrink-0"
+                          title="Phân công vào lớp"
+                        >
+                          <i className="fas fa-check mr-1"></i>Gán
+                        </button>
+                      </div>
+                      {user.classId && (
+                        <p className="text-[9px] text-blue-600 font-bold text-center">
+                          <i className="fas fa-graduation-cap mr-1"></i>
+                          {classes.find((c: any) => c.id === user.classId)?.name || `Lớp ID: ${user.classId.substring(0,8)}...`}
+                        </p>
+                      )}
+                    </>
                  )}
               </div>
             </div>

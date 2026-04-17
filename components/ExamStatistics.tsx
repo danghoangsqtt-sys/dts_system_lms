@@ -27,60 +27,67 @@ export default function ExamStatistics({ examId, examTitle, onClose }: ExamStati
         loadResults();
     }, [examId]);
 
+    // Pre-parse answers_data JSON một lần duy nhất (student_name và time_spent nằm bên trong)
+    const parsedResults = useMemo(() => results.map(r => {
+        let _parsed: any = {};
+        try { _parsed = typeof r.answers_data === 'string' ? JSON.parse(r.answers_data) : (r.answers_data || {}); } catch(e) {}
+        return { ...r, _parsed };
+    }), [results]);
+
     // === TỔNG QUAN ===
     const overviewStats = useMemo(() => {
-        if (results.length === 0) return null;
-        const scores = results.map(r => r.score || 0);
-        const uniqueStudents = new Set(results.map(r => r.student_id));
-        const totalTime = results.reduce((sum, r) => sum + (r.time_spent || 0), 0);
+        if (parsedResults.length === 0) return null;
+        const scores = parsedResults.map(r => r.score || 0);
+        const uniqueStudents = new Set(parsedResults.map(r => r.student_id));
+        const totalTime = parsedResults.reduce((sum, r) => sum + (r._parsed?.time_spent || 0), 0);
         return {
-            totalAttempts: results.length,
+            totalAttempts: parsedResults.length,
             uniqueStudents: uniqueStudents.size,
             avgScore: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
             maxScore: Math.max(...scores).toFixed(2),
             minScore: Math.min(...scores).toFixed(2),
-            avgTime: results.length > 0 ? Math.round(totalTime / results.length / 60) : 0,
+            avgTime: parsedResults.length > 0 ? Math.round(totalTime / parsedResults.length / 60) : 0,
             passRate: ((scores.filter(s => s >= 5).length / scores.length) * 100).toFixed(1)
         };
-    }, [results]);
+    }, [parsedResults]);
 
     // === CHI TIẾT SINH VIÊN ===
     const studentStats = useMemo(() => {
         const studentMap = new Map<string, { name: string; attempts: any[] }>();
-        results.forEach(r => {
+        parsedResults.forEach(r => {
             const sid = r.student_id;
-            if (!studentMap.has(sid)) {
-                studentMap.set(sid, { name: r.student_name || 'Học viên', attempts: [] });
-            }
+            const name = r._parsed?.student_name || 'Học viên';
+            if (!studentMap.has(sid)) studentMap.set(sid, { name, attempts: [] });
             studentMap.get(sid)!.attempts.push(r);
         });
         return Array.from(studentMap.entries()).map(([id, data]) => {
-            const scores = data.attempts.map(a => a.score || 0);
-            const times = data.attempts.map(a => a.time_spent || 0);
+            const scores = data.attempts.map((a: any) => a.score || 0);
+            const times = data.attempts.map((a: any) => a._parsed?.time_spent || 0);
             return {
                 id,
                 name: data.name,
                 attemptCount: data.attempts.length,
                 bestScore: Math.max(...scores).toFixed(2),
                 lastScore: scores[0]?.toFixed(2) || '0',
-                avgTime: times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length / 60) : 0,
+                avgTime: times.length > 0 ? Math.round(times.reduce((a: number, b: number) => a + b, 0) / times.length / 60) : 0,
                 lastAttempt: data.attempts[0]?.createdAt ? new Date(data.attempts[0].createdAt).toLocaleString('vi-VN') : 'N/A'
             };
         }).sort((a, b) => parseFloat(b.bestScore) - parseFloat(a.bestScore));
-    }, [results]);
+    }, [parsedResults]);
 
     // === PHÂN TÍCH CÂU HỎI ===
     const questionStats = useMemo(() => {
         const qMap = new Map<number, { total: number; wrong: number }>();
-        results.forEach(r => {
+        parsedResults.forEach(r => {
             try {
-                const answersDetail = typeof r.answers_detail === 'string' ? JSON.parse(r.answers_detail) : r.answers_detail;
-                if (answersDetail && Array.isArray(answersDetail)) {
-                    answersDetail.forEach((detail: any, idx: number) => {
+                // answers_detail nằm trong answers_data, là Object keyed by question ID
+                const answersDetail = r._parsed?.answers_detail;
+                if (answersDetail && typeof answersDetail === 'object' && !Array.isArray(answersDetail)) {
+                    Object.values(answersDetail).forEach((detail: any, idx: number) => {
                         if (!qMap.has(idx)) qMap.set(idx, { total: 0, wrong: 0 });
                         const entry = qMap.get(idx)!;
                         entry.total++;
-                        if (!detail.isCorrect) entry.wrong++;
+                        if (!detail.is_correct) entry.wrong++;
                     });
                 }
             } catch (e) { /* Bỏ qua dữ liệu lỗi */ }
@@ -93,7 +100,7 @@ export default function ExamStatistics({ examId, examTitle, onClose }: ExamStati
                 wrongRate: data.total > 0 ? ((data.wrong / data.total) * 100).toFixed(1) : '0'
             }))
             .sort((a, b) => parseFloat(b.wrongRate) - parseFloat(a.wrongRate));
-    }, [results]);
+    }, [parsedResults]);
 
     const formatMinutes = (mins: number) => {
         if (mins < 1) return '< 1 phút';

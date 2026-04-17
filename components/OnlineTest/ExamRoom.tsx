@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { submitExamResult } from '../../services/databaseService';
 
-export default function ExamRoom({ exam, questions, answerData, user, onExit }: { exam: any, questions: any[], answerData: any, user: any, onExit: () => void }) {
+export default function ExamRoom({ exam, questions, answerData, user, onExit, isPreview = false }: { exam: any, questions: any[], answerData: any, user: any, onExit: () => void, isPreview?: boolean }) {
     // Thời gian làm bài (tính bằng giây) - Giả sử exam.duration lưu theo phút
     const [timeLeft, setTimeLeft] = useState((exam.duration || 45) * 60);
     const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -57,23 +57,22 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
 
         questions.forEach((q, idx) => {
             const studentAns = answers[idx];
-            
-            // Hỗ trợ cả 2 trường hợp: examEngine lưu key bằng ID hoặc bằng Index
-            const correctAns = answerData[q.id] || answerData[idx]; 
-            
+
+            // examEngine lưu key 1-indexed (qNumber = index + 1), value là AnswerEntry {correctLetter, content, explanation}
+            const correctAnswerObj = answerData[idx + 1];
+            const correctAnsLetter = correctAnswerObj?.correctLetter;
+
             if (q.type === 'MULTIPLE_CHOICE') {
-                // FIX LỖI: Bắt buộc phải có câu trả lời (studentAns) thì mới so sánh
-                if (studentAns && studentAns === correctAns) {
+                if (studentAns && studentAns === correctAnsLetter) {
                     correct++;
                 }
             }
-            
+
             answersDetail[q.id || `q-${idx}`] = {
                 question_content: typeof q.content === 'string' ? q.content.substring(0, 100) : 'Nội dung câu hỏi',
                 student_answer: studentAns || 'Bỏ trống',
-                correct_answer: correctAns || 'Không có',
-                // Chỉ tính là đúng nếu học viên CÓ CHỌN và CHỌN ĐÚNG
-                is_correct: !!(studentAns && studentAns === correctAns)
+                correct_answer: correctAnsLetter || 'Không có',
+                is_correct: !!(studentAns && studentAns === correctAnsLetter)
             };
         });
 
@@ -84,23 +83,24 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
 
         try {
             const timeSpent = (exam.duration || 45) * 60 - timeLeft;
-            const compressedData = JSON.stringify({
-                student_name: user.fullName || user.name || 'Học viên',
-                correct_answers: correct,
-                total_questions: questions.length,
-                time_spent: timeSpent,
-                answers: answers,
-                answers_detail: answersDetail
-            });
 
-            await submitExamResult({
-                exam_id: exam.id,
-                student_id: user.id,
-                score: parseFloat(calculatedScore.toFixed(2)),
-                answers_data: compressedData
-            });
-            
-            // Chuyển sang màn hình Kết quả thay vì dùng alert
+            if (!isPreview) {
+                const compressedData = JSON.stringify({
+                    student_name: user.fullName || user.name || 'Học viên',
+                    correct_answers: correct,
+                    total_questions: questions.length,
+                    time_spent: timeSpent,
+                    answers: answers,
+                    answers_detail: answersDetail
+                });
+                await submitExamResult({
+                    exam_id: exam.id,
+                    student_id: user.id,
+                    score: parseFloat(calculatedScore.toFixed(2)),
+                    answers_data: compressedData
+                });
+            }
+
             setViewMode('RESULT');
         } catch (error) {
             console.error("Lỗi nộp bài:", error);
@@ -166,7 +166,10 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
                         <i className="fas fa-check text-5xl"></i>
                     </div>
                     <h2 className="text-2xl font-black text-slate-800 mb-2">Tuyệt vời! Bạn đã hoàn thành bài thi.</h2>
-                    <p className="text-slate-500 mb-8 font-medium">Kết quả của bạn đã được ghi nhận vào hệ thống.</p>
+                    {isPreview
+                        ? <p className="text-amber-600 font-bold mb-8 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2"><i className="fas fa-flask mr-2"></i>Chế độ thi thử — Kết quả không được lưu.</p>
+                        : <p className="text-slate-500 mb-8 font-medium">Kết quả của bạn đã được ghi nhận vào hệ thống.</p>
+                    }
                     
                     <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
                         <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Điểm số</p>
@@ -187,8 +190,14 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
 
     return (
         <div className="fixed inset-0 bg-slate-100 z-[100] flex flex-col md:flex-row overflow-hidden">
+            {/* Banner chế độ thi thử */}
+            {isPreview && (
+                <div className="absolute top-0 left-0 right-0 z-10 bg-amber-400 text-amber-900 text-center text-xs font-black uppercase tracking-widest py-1.5 flex items-center justify-center gap-2">
+                    <i className="fas fa-flask"></i> CHẾ ĐỘ THI THỬ — Kết quả sẽ không được lưu vào hệ thống
+                </div>
+            )}
             {/* Cột trái: Danh sách câu hỏi cuộn */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth">
+            <div className={`flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth ${isPreview ? 'pt-10' : ''}`}>
                 <div className="max-w-3xl mx-auto space-y-6 pb-20">
                     <h1 className="text-2xl font-black text-[#14452F] text-center mb-8 bg-white p-4 rounded-xl shadow-sm">
                         BÀI THI: {exam.title}

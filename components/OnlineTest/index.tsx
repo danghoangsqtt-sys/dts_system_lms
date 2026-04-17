@@ -30,6 +30,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
 
     // Thống kê
     const [statsExam, setStatsExam] = useState<any>(null);
+    const [isPreviewMode, setIsPreviewMode] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -132,8 +133,38 @@ export default function OnlineTestManager({ user }: { user: any }) {
         } catch (e) { alert("Lỗi khi lưu cấu hình!"); }
     };
 
+    const loadExamQuestions = async (exam: any) => {
+        const sourceQuestions = await databaseService.fetchQuestions(user.id, user.role);
+        let examQuestionsToUse: any[] = [];
+        if (exam.questionIds && exam.questionIds.length > 0) {
+            examQuestionsToUse = sourceQuestions.filter((q: any) => exam.questionIds.includes(q.id));
+        } else {
+            examQuestionsToUse = sourceQuestions.filter((q: any) => q.folder === exam.folder || q.folderId === exam.folder);
+        }
+        if (examQuestionsToUse.length === 0) {
+            alert("Đề thi này chưa có câu hỏi nào (Hoặc Admin chưa cấp quyền Read bảng Questions trong Appwrite).");
+            return false;
+        }
+        const { examQuestions, answerData } = generateExamPaper(examQuestionsToUse, examQuestionsToUse.length, "ONLINE_TEST");
+        setExamQuestions(examQuestions);
+        setExamAnswerData(answerData);
+        setActiveExamData(exam);
+        return true;
+    };
+
+    const handlePreviewExam = async (exam: any) => {
+        try {
+            setIsPreviewMode(true);
+            await loadExamQuestions(exam);
+        } catch (error) {
+            console.error("Lỗi tải đề thi thử:", error);
+            alert("Lỗi tải cấu trúc đề thi!");
+            setIsPreviewMode(false);
+        }
+    };
+
     const handleTakeExam = async (exam: any) => {
-        // 1. Kiểm tra thời gian
+        // 1. Kiểm tra thời gian (chỉ học viên bị giới hạn)
         const now = new Date();
         if (exam.start_time && now < new Date(exam.start_time)) {
             alert("Chưa đến giờ làm bài!"); return;
@@ -160,53 +191,28 @@ export default function OnlineTestManager({ user }: { user: any }) {
                 }
             } catch (err) {
                 console.warn('Lỗi kiểm tra số lần thi:', err);
-                // Cho phép thi tiếp nếu API lỗi
             }
         }
 
         try {
-            const sourceQuestions = await databaseService.fetchQuestions(user.id, user.role); 
-            
-            // BỘ LỌC CÂU HỎI THÔNG MINH
-            let examQuestionsToUse = [];
-            if (exam.questionIds && exam.questionIds.length > 0) {
-                // Ưu tiên 1: Đề thi có danh sách câu hỏi cụ thể (Sinh ra từ ExamCreator)
-                examQuestionsToUse = sourceQuestions.filter(q => exam.questionIds.includes(q.id));
-            } else {
-                // Ưu tiên 2: Kéo toàn bộ câu hỏi trong Folder (Dùng cho đề thi động)
-                examQuestionsToUse = sourceQuestions.filter(q => q.folder === exam.folder || q.folderId === exam.folder);
-            }
-            
-            if (examQuestionsToUse.length === 0) {
-                alert("Đề thi này chưa có câu hỏi nào (Hoặc Admin chưa cấp quyền Read bảng Questions trong Appwrite).");
-                return;
-            }
-
-            // Sinh đề thi (Trộn đáp án, trộn câu hỏi)
-            const { examQuestions, answerData } = generateExamPaper(
-                examQuestionsToUse, 
-                examQuestionsToUse.length, 
-                "ONLINE_TEST"
-            );
-            
-            setExamQuestions(examQuestions);
-            setExamAnswerData(answerData);
-            setActiveExamData(exam);
-        } catch (error) { 
+            setIsPreviewMode(false);
+            await loadExamQuestions(exam);
+        } catch (error) {
             console.error("Lỗi lấy câu hỏi:", error);
-            alert("Lỗi tải cấu trúc đề thi!"); 
+            alert("Lỗi tải cấu trúc đề thi!");
         }
     };
 
     // Nếu đang thi, ẩn danh sách đi và hiện ExamRoom
     if (activeExamData) {
         return (
-            <ExamRoom 
-                exam={activeExamData} 
-                questions={examQuestions} 
-                answerData={examAnswerData} 
-                user={user} 
-                onExit={() => setActiveExamData(null)} 
+            <ExamRoom
+                exam={activeExamData}
+                questions={examQuestions}
+                answerData={examAnswerData}
+                user={user}
+                isPreview={isPreviewMode}
+                onExit={() => { setActiveExamData(null); setIsPreviewMode(false); }}
             />
         );
     }
@@ -262,16 +268,23 @@ export default function OnlineTestManager({ user }: { user: any }) {
                                     {exam.status === 'published' ? 'Đã Xuất Bản' : 'Bản Nháp'}
                                 </span>
                                 {isTeacherOrAdmin && (
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setStatsExam(exam); }} 
+                                    <div className="flex gap-2 items-center">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handlePreviewExam(exam); }}
+                                            className="text-amber-600 text-xs font-bold hover:underline"
+                                            title="Thi thử — kết quả không lưu"
+                                        >
+                                            <i className="fas fa-flask mr-1"></i> Thi thử
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setStatsExam(exam); }}
                                             className="text-orange-600 text-xs font-bold hover:underline"
                                             title="Xem thống kê bài thi"
                                         >
                                             <i className="fas fa-chart-bar mr-1"></i> Thống kê
                                         </button>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); openConfigModal(exam); }} 
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); openConfigModal(exam); }}
                                             className="text-blue-600 text-xs font-bold hover:underline"
                                         >
                                             <i className="fas fa-cog mr-1"></i> Cấu hình
