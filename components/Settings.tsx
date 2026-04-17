@@ -24,8 +24,8 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
 
   const handleSaveKey = () => {
     const trimmed = geminiKey.trim();
-    if (!trimmed.startsWith('AIza')) {
-      onNotify('API Key không hợp lệ (phải bắt đầu bằng AIza...)', 'error');
+    if (trimmed.length < 20) {
+      onNotify('API Key không hợp lệ (quá ngắn).', 'error');
       return;
     }
     localStorage.setItem('DTS_GEMINI_API_KEY', trimmed);

@@ -18,7 +18,7 @@ export function getNextKey(): string {
 /** Returns key from request header if present, otherwise falls back to env var. */
 export function getKeyFromRequest(headers: Record<string, string | string[] | undefined>): string {
   const headerKey = headers['x-gemini-key'];
-  if (headerKey && typeof headerKey === 'string' && headerKey.startsWith('AIza')) {
+  if (headerKey && typeof headerKey === 'string' && headerKey.length >= 20) {
     return headerKey;
   }
   return getNextKey();
